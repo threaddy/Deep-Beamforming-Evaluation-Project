@@ -144,7 +144,6 @@ for i, p in zip(dnn1_outputs, new_weights):
 
 # execute mvdr
 mvdr_inputs, mvdr_outputs = mvdr(dnn1_outputs, ch_rw_outputs)
-
 # Recover and save enhanced wav
 pp.create_folder(output_file_folder)
 # dab_outputs_sp = np.exp(dab_outputs)
