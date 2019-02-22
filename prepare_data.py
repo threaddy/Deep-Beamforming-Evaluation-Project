@@ -3,6 +3,7 @@ import os
 import h5py
 import time
 import soundfile
+import tables
 
 from scipy import signal
 
@@ -102,6 +103,10 @@ def pack_features(in_x, in_y, data_type):
     if len(in_x) != len(in_y):
         raise Exception("Error! Training input and output with different size")
 
+    out_path = os.path.join(conf.packed_feature_dir, data_type, "data.h5")
+    create_folder(os.path.dirname(out_path))
+    i = 0
+
     for na in range(len(in_x)):
 
         in_x[na] = np.abs(in_x[na])
@@ -113,12 +118,19 @@ def pack_features(in_x, in_y, data_type):
 
         # Cut input spectrogram to 3D segments with n_concat.
         mixed_x_3d = mat_2d_to_3d(in_x[na], agg_num=conf.n_concat, hop=conf.n_hop)
+        mixed_x_3d= log_sp(mixed_x_3d).astype(np.float32)
         x_all.append(mixed_x_3d)
 
         # Cut target spectrogram and take the center frame of each 3D segment.
         speech_x_3d = mat_2d_to_3d(in_y[na], agg_num=conf.n_concat, hop=conf.n_hop)
         y = speech_x_3d[:, int((conf.n_concat - 1) / 2), :]
+        y = log_sp(y).astype(np.float32)
         y_all.append(y)
+
+
+        x_all_new = np.concatenate(x_all, axis=0)  # (n_segs, n_concat, n_freq)
+        y_all_new = np.concatenate(y_all, axis=0)  # (n_segs, n_freq)
+
 
         # Print.
         if cnt % 100 == 0:
@@ -127,23 +139,25 @@ def pack_features(in_x, in_y, data_type):
         # if cnt == 3: break
         cnt += 1
 
-    x_all = np.concatenate(x_all, axis=0)  # (n_segs, n_concat, n_freq)
-    y_all = np.concatenate(y_all, axis=0)  # (n_segs, n_freq)
+        if (na+1) % 250 == 0:
+            i += 1
+            # Write out data to .h5 file.
+            out_path = os.path.join(conf.packed_feature_dir, data_type, "data_%s.h5" % str(i))
+            create_folder(os.path.dirname(out_path))
 
-    x_all = log_sp(x_all).astype(np.float32)
-    y_all = log_sp(y_all).astype(np.float32)
+            with h5py.File(out_path, 'w') as hf:
+                hf.create_dataset('x', data=x_all_new)
+                hf.create_dataset('y', data=y_all_new)
 
-    # Write out data to .h5 file.
-    out_path = os.path.join(conf.packed_feature_dir, data_type, "data.h5")
-    create_folder(os.path.dirname(out_path))
-    with h5py.File(out_path, 'w') as hf:
-        hf.create_dataset('x', data=x_all)
-        hf.create_dataset('y', data=y_all)
+            y_all = []
+            x_all = []
 
-    print("Write out to %s" % out_path)
+            print("Write out to %s" % out_path)
+
+
     print("Pack features finished! %s s" % (time.time() - t1,))
 
-    return x_all, y_all
+    return i
 
 
 def log_sp(x):
