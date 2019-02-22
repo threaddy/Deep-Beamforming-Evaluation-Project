@@ -18,6 +18,8 @@ training_stats2 = "data_train/dnn1_packed_features/training_stats/"
 input_dir = "data_eval/dnn1_in"
 output_dir = "data_eval/dab"
 
+debug = False
+
 
 def plot_training_stat(stats_dir, bgn_iter, fin_iter, interval_iter):
     """Plot training and testing loss.
@@ -51,7 +53,6 @@ def plot_training_stat(stats_dir, bgn_iter, fin_iter, interval_iter):
     plt.show()
 
 
-
 def calculate_pesq(in_speech_dir, out_speech_dir):
     """Calculate PESQ of all enhaced speech.
 
@@ -72,9 +73,7 @@ def calculate_pesq(in_speech_dir, out_speech_dir):
                  for na in sorted(os.listdir(out_speech_dir))
                  if na.endswith(".wav")]
 
-
     for (na_in, na_out) in zip(out_names, in_names):
-
         # Call executable PESQ tool.
         cmd = ' '.join(["./pesq", na_in, na_out, "+16000"])
         os.system(cmd)
@@ -111,7 +110,6 @@ def get_pesq_stats():
         std_list.append(std_pesq)
         print(f.format(noise_type, "%.2f +- %.2f" % (avg_pesq, std_pesq)))
     print(f.format("Avg.", "%.2f +- %.2f" % (np.mean(avg_list), np.mean(std_list))), "\n")
-
 
 
 def calc_stoi(in_speech_dir, out_speech_dir):
@@ -169,8 +167,10 @@ def calc_sdr(in_speech_dir, out_speech_dir):
     print("---------------------------------")
     return avg_sdr, std_sdr
 
-# plot_training_stat(training_stats1, 0, 100, 10)
-# calculate_pesq(input_dir, output_dir)
-# get_pesq_stats()
-# stoi_res = calc_stoi(input_dir, output_dir)
-sdr_res = calc_sdr(input_dir, output_dir)
+
+if debug == True:
+    plot_training_stat(training_stats1, 0, 100, 10)
+    calculate_pesq(input_dir, output_dir)
+    get_pesq_stats()
+    stoi_res = calc_stoi(input_dir, output_dir)
+    sdr_res = calc_sdr(input_dir, output_dir)

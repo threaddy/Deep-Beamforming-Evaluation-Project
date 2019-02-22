@@ -35,6 +35,31 @@ def recover_wav(pd_abs_x, gt_x, n_overlap, winfunc, wav_len=None):
         s = pad_or_trunc(s, wav_len)
     return s
 
+def recover_wav_complex(pd_abs_x, n_overlap, winfunc, wav_len=None):
+    """Recover wave from spectrogram.
+    If you are using scipy.signal.spectrogram, you may need to multipy a scaler
+    to the recovered audio after using this function. For example,
+    recover_scaler = np.sqrt((ham_win**2).sum())
+
+    Args:
+      pd_abs_x: 2d array, (n_time, n_freq)
+      gt_x: 2d complex array, (n_time, n_freq)
+      n_overlap: integar.
+      winfunc: func, the analysis window to apply to each frame.
+      wav_len: integer. Pad or trunc to wav_len with zero.
+
+    Returns:
+      1d array.
+    """
+    pd_abs_x = half_to_whole(pd_abs_x)
+    frames = ifft_to_wav(pd_abs_x)
+    (n_frames, n_window) = frames.shape
+    s = deframesig(frames=frames, siglen=0, frame_len=n_window,
+                   frame_step=n_window - n_overlap, winfunc=winfunc)
+    if wav_len:
+        s = pad_or_trunc(s, wav_len)
+    return s
+
 
 def real_to_complex(pd_abs_x, gt_x):
     """Recover pred spectrogram's phase from ground truth's phase.
