@@ -4,16 +4,17 @@ import wave
 import math
 from sklearn.model_selection import train_test_split
 import random
+import string
 import prepare_data as pp
 import pickle
 
-timit_dataset_folder = 'timit'
+timit_dataset_folder = 'TIMIT/TRAIN'
 dnn1_dataset_folder = "data_train/dnn1_train/"
 dnn2_dataset_folder = "data_train/dnn2_train/"
-noise1_path = 'babble.wav'
+noise1_path = 'noise/babble.wav'
 mixed_snr = "snr_list.p"
-dnn1_utterances = 4
-dnn2_utterances = 6
+dnn1_utterances = 500
+dnn2_utterances = 2
 fs = 16000
 
 def load_data(data_directory):  # load the dataset, return a list of all found file
@@ -24,7 +25,7 @@ def load_data(data_directory):  # load the dataset, return a list of all found f
         speaker_directory = os.path.join(data_directory, d)
         utterance_names = [os.path.join(speaker_directory, f)
                            for f in os.listdir(speaker_directory)
-                           if f.endswith(".wav")]
+                           if f.endswith(".WAV")]
         allfiles.append(utterance_names)
     return allfiles
 
@@ -63,10 +64,9 @@ def set_microphone_at_distance(clean_data, noise_data, framerate, distance):
     first_snr = clean_energy / noise_energy
     snr_ratio = meter_snr / first_snr
     new_noise_data = noise_data / snr_ratio                      # normalizing snr level at 15 db at one meter distance
-    new_clean_data = clean_data / distance                       # attenuating clean speech at 1/distance rate
 
-    mixed_data = (new_noise_data + new_clean_data)
-    return mixed_data, new_noise_data
+    mixed_data = (new_noise_data + (clean_data / distance)) # attenuating clean speech at 1/distance rate and adding noise
+    return mixed_data, new_noise_data, clean_data
 
 
 
@@ -88,14 +88,16 @@ for n in range(dnn1_utterances):
     dist = random.uniform(1, 20)
     distance1_list.append(dist)
     (clean, _) = pp.read_audio(current_file)
+    sr = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(5))
 
-    mixed, noise_new = set_microphone_at_distance(clean, noise, fs, dist)
+    mixed, noise_new, clean_new = set_microphone_at_distance(clean, noise, fs, dist)
 
-    audio_path = os.path.join(dnn1_dataset_folder, "mix_%s" % os.path.basename(current_file))
+    path_list = current_file.split(os.sep)
+    audio_path = os.path.join(dnn1_dataset_folder, "mix_%s_%s_%s" % (path_list[2], sr, os.path.basename(current_file)))
     pp.write_audio(audio_path, mixed, fs)
 
-    clean_path = os.path.join(dnn1_dataset_folder, "clean_%s" % os.path.basename(current_file))
-    pp.write_audio(clean_path, clean, fs)
+    clean_path = os.path.join(dnn1_dataset_folder, "clean_%s_%s_%s" % (path_list[2], sr, os.path.basename(current_file)))
+    pp.write_audio(clean_path, clean_new, fs)
 
 snr_file = open(os.path.join(dnn1_dataset_folder, mixed_snr), "wb")
 pickle.dump(distance1_list, snr_file)
@@ -110,13 +112,14 @@ for n in range(dnn2_utterances):
     dist = random.uniform(1, 20)
     distance2_list.append(dist)
     (clean, _) = pp.read_audio(current_file)
+    sr = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(5))
 
-    mixed, noise_new = set_microphone_at_distance(clean, noise, fs, dist)
-
-    audio_path = os.path.join(dnn2_dataset_folder, "mix_%s" % os.path.basename(current_file))
+    mixed, noise_new, clean_new = set_microphone_at_distance(clean, noise, fs, dist)
+    path_list = current_file.split(os.sep)
+    audio_path = os.path.join(dnn2_dataset_folder, "mix_%s_%s_%s" % (path_list[2], sr, os.path.basename(current_file)))
     pp.write_audio(audio_path, mixed, fs)
 
-    clean_path = os.path.join(dnn2_dataset_folder, "clean_%s" % os.path.basename(current_file))
+    clean_path = os.path.join(dnn2_dataset_folder, "clean_%s_%s_%s" % (path_list[2], sr, os.path.basename(current_file)))
     pp.write_audio(clean_path, clean, fs)
 
 snr_file = open(os.path.join(dnn2_dataset_folder, mixed_snr), "wb")
