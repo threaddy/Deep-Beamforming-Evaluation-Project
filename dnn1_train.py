@@ -16,13 +16,31 @@ import config_dnn1 as conf1
 from sklearn import preprocessing
 
 import tensorboard
-
+import sys
 
 
 ########################################################################################################################################
 # FUNCTIONS
 ########################################################################################################################################
-
+def get_size(obj, seen=None):
+    """Recursively finds size of objects"""
+    size = sys.getsizeof(obj)
+    if seen is None:
+        seen = set()
+    obj_id = id(obj)
+    if obj_id in seen:
+        return 0
+    # Important mark as seen *before* entering recursion to gracefully handle
+    # self-referential objects
+    seen.add(obj_id)
+    if isinstance(obj, dict):
+        size += sum([get_size(v, seen) for v in obj.values()])
+        size += sum([get_size(k, seen) for k in obj.keys()])
+    elif hasattr(obj, '__dict__'):
+        size += get_size(obj.__dict__, seen)
+    elif hasattr(obj, '__iter__') and not isinstance(obj, (str, bytes, bytearray)):
+        size += sum([get_size(i, seen) for i in obj])
+    return size
 
 
 def eval(model, gen, x, y):
@@ -86,60 +104,88 @@ def compute_scaler(data_type):
 
 
 # Load data.
-t1 = time.time()
-train_x_files = np.asarray(pp.load_data(conf1.train_folder, "mix"))
-train_y_files = np.asarray(pp.load_data(conf1.train_folder, "clean"))
+def prepare_database():
+    t1 = time.time()
+    train_x_files = np.asarray(pp.load_data(conf1.train_folder, "mix"))
+    train_y_files = np.asarray(pp.load_data(conf1.train_folder, "clean"))
 
-dnn2_train_x_files = np.asarray(pp.load_data(conf1.dnn2_train_folder, "mix"))
-dnn2_train_y_files = np.asarray(pp.load_data(conf1.dnn2_train_folder, "clean"))
+    dnn2_train_x_files = np.asarray(pp.load_data(conf1.dnn2_train_folder, "mix"))
+    dnn2_train_y_files = np.asarray(pp.load_data(conf1.dnn2_train_folder, "clean"))
 
-tr_x_spec = []
-for na in train_x_files:
-    (a, _) = pp.read_audio(na)
-    b = pp.calc_sp(a, mode='complex')
-    tr_x_spec.append(b)
+    test_x_files = np.append(train_x_files, dnn2_train_x_files, axis=0)
+    test_y_files = np.append(train_y_files, dnn2_train_y_files, axis=0)
 
-tr_y_spec = []
-for na in train_y_files:
-    (c, _) = pp.read_audio(na)
-    t = pp.calc_sp(c, mode='magnitude')
-    tr_y_spec.append(t)
+    tr_x_spec = []
+    for na in train_x_files:
+        (a, _) = pp.read_audio(na)
+        b = pp.calc_sp(a, mode='complex')
+        tr_x_spec.append(b)
 
-
-test_x_files = np.append(train_x_files, dnn2_train_x_files, axis=0)
-test_y_files = np.append(train_y_files, dnn2_train_y_files, axis=0)
-
-te_x_spec = []
-for na in test_x_files:
-    (a, _) = pp.read_audio(na)
-    b = pp.calc_sp(a, mode='complex')
-    te_x_spec.append(b)
-
-te_y_spec = []
-for na in test_y_files:
+    tr_y_spec = []
+    for na in train_y_files:
         (c, _) = pp.read_audio(na)
         t = pp.calc_sp(c, mode='magnitude')
-        te_y_spec.append(t)
+        tr_y_spec.append(t)
 
 
-(tr_x, tr_y) = pp.pack_features(tr_x_spec, tr_y_spec, 'train')
-(te_x, te_y) = pp.pack_features(te_x_spec, te_y_spec, 'test')
 
-compute_scaler("train")
-compute_scaler("test")
+
+    te_x_spec = []
+    for na in test_x_files:
+        (a, _) = pp.read_audio(na)
+        b = pp.calc_sp(a, mode='complex')
+        te_x_spec.append(b)
+
+    te_y_spec = []
+    for na in test_y_files:
+            (c, _) = pp.read_audio(na)
+            t = pp.calc_sp(c, mode='magnitude')
+            te_y_spec.append(t)
+
+
+    num_tr = pp.pack_features(tr_x_spec, tr_y_spec, 'train')
+    num_te = pp.pack_features(te_x_spec, te_y_spec, 'test')
+
+    # compute_scaler("train")
+    # compute_scaler("test")
+    return num_tr, num_te
+
 ########################################################################################################################
 ########################################################################################################################
 # TRAIN
 ########################################################################################################################
 ########################################################################################################################
 
-# # Load data.
-# t1 = time.time()
-# tr_hdf5_path = os.path.join("data_train", "dnn1_packed_features", "train", "data.h5")
-# te_hdf5_path = os.path.join("data_train", "dnn1_packed_features", "test", "data.h5")
-#
-# (tr_x, tr_y) = pp.load_hdf5(tr_hdf5_path)
-# (te_x, te_y) = pp.load_hdf5(te_hdf5_path)
+# Load data.
+t1 = time.time()
+
+# COMMENT IF DATABASE ALREADY CREATED
+
+# num_tr, num_te = prepare_database()
+num_tr = 2
+num_te = 2
+
+tr_x = []
+tr_y = []
+te_x = []
+te_y = []
+
+for i in range(num_tr):
+    tr_x_t, tr_y_t = pp.load_hdf5(os.path.join("data_train", "dnn1_packed_features", "train", "data_%s.h5" % str(i+1)))
+    tr_x.append(tr_x_t)
+    tr_y.append(tr_y_t)
+
+for i in range(num_te):
+    te_x_t, te_y_t = pp.load_hdf5(os.path.join("data_train", "dnn1_packed_features", "test", "data_%s.h5" % str(i+1)))
+    te_x.append(te_x_t)
+    te_y.append(te_y_t)
+
+
+tr_x = np.concatenate(tr_x, axis=0)
+tr_y = np.concatenate(tr_y, axis=0)
+te_x = np.concatenate(te_x, axis=0)
+te_y = np.concatenate(te_y, axis=0)
+
 print(tr_x.shape, tr_y.shape)
 print(te_x.shape, te_y.shape)
 print("Load data time: %s s" % (time.time() - t1,))
@@ -165,9 +211,10 @@ if True:
 #     pause
 
 # Build model
+
+# Build model
 (_, n_concat, n_freq) = tr_x.shape
 n_hid = 1024
-
 
 model = Sequential()
 model.add(Flatten(input_shape=(n_concat, n_freq)))
@@ -179,6 +226,8 @@ model.add(Dropout(0.2))
 # model.add(Dropout(0.2))
 model.add(Dense(n_freq, activation='linear'))
 model.summary()
+
+
 
 model.compile(loss='mean_absolute_error',
               optimizer=SGD(lr=conf1.lr, momentum=0.0, decay=0.0015))
@@ -208,10 +257,13 @@ stat_dict = {'iter': iter,
 stat_path = os.path.join(stats_dir, "%diters.p" % iter)
 pickle.dump(stat_dict, open(stat_path, 'wb'), protocol=pickle.HIGHEST_PROTOCOL)
 
+
+
+
 # Train.
 t1 = time.time()
 for (batch_x, batch_y) in tr_gen.generate(xs=[tr_x], ys=[tr_y]):
-    loss = model.train_on_batch(batch_x, batch_y)
+    loss = model.train_on_batch(batch_x, batch_y, )
     iter += 1
 
     # Validate and save training stats.
@@ -236,9 +288,13 @@ for (batch_x, batch_y) in tr_gen.generate(xs=[tr_x], ys=[tr_y]):
     if iter == (conf1.iterations+1):
         break
 
-pp.create_folder('logs')
+
+# model.fit(tr_x, tr_y, epochs= 5)
+#
+# test_loss, test_acc = model.evaluate(tr_x, tr_y)
+
+
 
 print("Training time: %s s" % (time.time() - t1,))
-
 
 
