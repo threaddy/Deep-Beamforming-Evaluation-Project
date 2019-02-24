@@ -7,7 +7,6 @@ import h5py
 from keras.models import Sequential
 from keras.layers import Dense, Dropout, Flatten
 from keras.optimizers import SGD
-import keras.callbacks
 
 
 from data_generator import DataGenerator
@@ -15,7 +14,8 @@ import prepare_data as pp
 import config_dnn1 as conf1
 from sklearn import preprocessing
 
-import tensorboard
+from keras.callbacks import TensorBoard
+import tensorflow as tf
 import sys
 
 
@@ -95,6 +95,15 @@ def compute_scaler(data_type):
     print("Save scaler to %s" % out_path)
     print("Compute scaler finished! %s s" % (time.time() - t1,))
 
+
+def write_log(callback, names, logs, batch_no):
+    for name, value in zip(names, logs):
+        summary = tf.Summary()
+        summary_value = summary.value.add()
+        summary_value.simple_value = value
+        summary_value.tag = name
+        callback.writer.add_summary(summary, batch_no)
+        callback.writer.flush()
 ########################################################################################################################
 ########################################################################################################################
 # PREPARE DATASET
@@ -142,13 +151,19 @@ def prepare_database():
             t = pp.calc_sp(c, mode='magnitude')
             te_y_spec.append(t)
 
-
+    print(len(tr_x_spec))
+    print(len(tr_y_spec))
     num_tr = pp.pack_features(tr_x_spec, tr_y_spec, 'train')
     num_te = pp.pack_features(te_x_spec, te_y_spec, 'test')
 
     # compute_scaler("train")
     # compute_scaler("test")
     return num_tr, num_te
+
+
+
+
+
 
 ########################################################################################################################
 ########################################################################################################################
@@ -160,10 +175,13 @@ def prepare_database():
 t1 = time.time()
 
 # COMMENT IF DATABASE ALREADY CREATED
-
-# num_tr, num_te = prepare_database()
-num_tr = 2
-num_te = 2
+if conf1.use_previous_files:
+    num_tr, num_te = prepare_database()
+else:
+    num_tr = len([f for f in os.listdir(os.path.join("data_train", "dnn1_packed_features", "train"))
+                                       if f.endswith('.h5')])
+    num_te = len([f for f in os.listdir(os.path.join("data_train", "dnn2_packed_features", "train"))
+                                       if f.endswith('.h5')])
 
 tr_x = []
 tr_y = []
@@ -171,12 +189,12 @@ te_x = []
 te_y = []
 
 for i in range(num_tr):
-    tr_x_t, tr_y_t = pp.load_hdf5(os.path.join("data_train", "dnn1_packed_features", "train", "data_%s.h5" % str(i+1)))
+    tr_x_t, tr_y_t = pp.load_hdf5(os.path.join("data_train", "dnn1_packed_features", "train", "tf_data_%s.h5" % str(i+1)))
     tr_x.append(tr_x_t)
     tr_y.append(tr_y_t)
 
 for i in range(num_te):
-    te_x_t, te_y_t = pp.load_hdf5(os.path.join("data_train", "dnn1_packed_features", "test", "data_%s.h5" % str(i+1)))
+    te_x_t, te_y_t = pp.load_hdf5(os.path.join("data_train", "dnn1_packed_features", "test", "tf_data_%s.h5" % str(i+1)))
     te_x.append(te_x_t)
     te_y.append(te_y_t)
 
@@ -227,10 +245,13 @@ model.add(Dropout(0.2))
 model.add(Dense(n_freq, activation='linear'))
 model.summary()
 
-
-
 model.compile(loss='mean_absolute_error',
               optimizer=SGD(lr=conf1.lr, momentum=0.0, decay=0.0015))
+
+callback = TensorBoard(log_dir='logs')
+callback.set_model(model)
+train_names = ['train_loss', 'train_mae']
+val_names = ['val_loss', 'val_mae']
 
 # Data generator.
 tr_gen = DataGenerator(batch_size=conf1.batch_size, gtype='train')
@@ -266,12 +287,15 @@ for (batch_x, batch_y) in tr_gen.generate(xs=[tr_x], ys=[tr_y]):
     loss = model.train_on_batch(batch_x, batch_y, )
     iter += 1
 
+
+
     # Validate and save training stats.
     if iter % 10 == 0:
         tr_loss = eval(model, eval_tr_gen, tr_x, tr_y)
         te_loss = eval(model, eval_te_gen, te_x, te_y)
         print("Iteration: %d, tr_loss: %f, te_loss: %f" % (iter, tr_loss, te_loss))
 
+        write_log(callback, train_names, [tr_loss, te_loss], iter)
         # Save out training stats.
         stat_dict = {'iter': iter,
                      'tr_loss': tr_loss,

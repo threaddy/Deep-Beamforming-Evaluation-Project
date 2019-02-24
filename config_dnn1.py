@@ -4,6 +4,9 @@ packed_feature_dir = "data_train/dnn1_packed_features"
 
 dnn2_train_folder = "data_train/dnn2_train/"         # just to test dnn1 with dnn2 files, too
 
+data_file_dimension = 10
+use_previous_files = True
+
 sample_rate = 16000
 n_window = 512      # windows size for FFT
 n_overlap = 256     # overlap of window
