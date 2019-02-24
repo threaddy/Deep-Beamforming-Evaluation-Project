@@ -1,21 +1,40 @@
 import numpy as np
 import os
-import wave
 import math
 from sklearn.model_selection import train_test_split
 import random
 import string
 import prepare_data as pp
+import config_dnn1 as conf1
 import pickle
-
-timit_dataset_folder = 'TIMIT/TRAIN'
+import h5py
+# from numba import vectorize
+########################################################################################################################
+# Parameters
+########################################################################################################################
+timit_dataset_folder = 'timit'
 dnn1_dataset_folder = "data_train/dnn1_train/"
 dnn2_dataset_folder = "data_train/dnn2_train/"
 noise1_path = 'noise/babble.wav'
 mixed_snr = "snr_list.p"
-dnn1_utterances = 500
-dnn2_utterances = 2
+dnn1_utterances = 100
+dnn2_utterances = 100
 fs = 16000
+
+data_file_dimension = conf1.data_file_dimension
+
+save_single_files = True
+
+########################################################################################################################
+# Functions
+########################################################################################################################
+
+# @vectorize(["float64(float64, float64)"], target='cuda')
+# def VectorAdd(a, b):
+#     return a + b
+
+
+
 
 def load_data(data_directory):  # load the dataset, return a list of all found file
     directories = [d for d in os.listdir(data_directory)
@@ -25,7 +44,7 @@ def load_data(data_directory):  # load the dataset, return a list of all found f
         speaker_directory = os.path.join(data_directory, d)
         utterance_names = [os.path.join(speaker_directory, f)
                            for f in os.listdir(speaker_directory)
-                           if f.endswith(".WAV")]
+                           if f.endswith(".wav")]
         allfiles.append(utterance_names)
     return allfiles
 
@@ -65,22 +84,34 @@ def set_microphone_at_distance(clean_data, noise_data, framerate, distance):
     snr_ratio = meter_snr / first_snr
     new_noise_data = noise_data / snr_ratio                      # normalizing snr level at 15 db at one meter distance
 
-    mixed_data = (new_noise_data + (clean_data / distance)) # attenuating clean speech at 1/distance rate and adding noise
+
+    # mixed_data = VectorAdd(noise_data, clean_data/distance)     # attenuating clean speech at 1/distance rate and adding noise
+    mixed_data = (new_noise_data + (clean_data / distance))     # attenuating clean speech at 1/distance rate and adding noise
     return mixed_data, new_noise_data, clean_data
 
 
+########################################################################################################################
+# GENERATE FILE
+########################################################################################################################
 
-training_data = load_data(timit_dataset_folder)  # list of training files
-# training_data = (np.asarray(training_data)).flatten(order = 'C')
+training_data = load_data(timit_dataset_folder)  # load list of training files
 
 dnn1_data, dnn2_data = train_test_split(training_data, test_size=0.5,
                                         random_state=13)  # split training data between two dnn
+
 dnn1_data = (np.asarray(dnn1_data)).flatten()
 dnn2_data = (np.asarray(dnn2_data)).flatten()
 print(dnn1_data.shape)
 (noise, _) = pp.read_audio(noise1_path)
 pp.create_folder(dnn1_dataset_folder)
+
+
+# GENERATE FILES FOR DNN1
+
 distance1_list = []
+mix_all = []
+clean_all = []
+i = 0
 for n in range(dnn1_utterances):
     # rand_x = random.randint(0, 3)
     # rand_y = random.randint(0, 9)
@@ -92,19 +123,48 @@ for n in range(dnn1_utterances):
 
     mixed, noise_new, clean_new = set_microphone_at_distance(clean, noise, fs, dist)
 
-    path_list = current_file.split(os.sep)
-    audio_path = os.path.join(dnn1_dataset_folder, "mix_%s_%s_%s" % (path_list[2], sr, os.path.basename(current_file)))
-    pp.write_audio(audio_path, mixed, fs)
+    # Print.
+    if n % 10 == 0:
+        print(n)
 
-    clean_path = os.path.join(dnn1_dataset_folder, "clean_%s_%s_%s" % (path_list[2], sr, os.path.basename(current_file)))
-    pp.write_audio(clean_path, clean_new, fs)
+    if save_single_files:
+        path_list = current_file.split(os.sep)
+        audio_path = os.path.join(dnn1_dataset_folder,
+                                  "mix_%s_%s_%s" % (path_list[2], sr, os.path.basename(current_file)))
+
+        clean_path = os.path.join(dnn1_dataset_folder,
+                                  "clean_%s_%s_%s" % (path_list[2], sr, os.path.basename(current_file)))
+        pp.write_audio(audio_path, mixed, fs)
+        pp.write_audio(clean_path, clean_new, fs)
+
+    else:
+        clean_all.append(clean_new)
+        mix_all.append(mixed)
+
+        clean_all_new = np.concatenate(clean_all, axis=0)
+        mix_all_new = np.concatenate(mix_all, axis=0)
+
+        if (n) % data_file_dimension == 0:
+            i += 1
+            # Write out data to .h5 file.
+            out_path = os.path.join(dnn1_dataset_folder, "data_mix_%s.h5" % str(i))
+            pp.create_folder(os.path.dirname(out_path))
+
+            with h5py.File(out_path, 'w') as hf:
+                hf.create_dataset('x', data=mix_all_new)
+                hf.create_dataset('y', data=clean_all_new)
+
+            clean_all = []
+            mix_all = []
 
 snr_file = open(os.path.join(dnn1_dataset_folder, mixed_snr), "wb")
 pickle.dump(distance1_list, snr_file)
 snr_file.close()
 
 
+# GENERATE FILES FOR DNN2
 
+i = 0
 distance2_list = []
 for n in range(dnn2_utterances):
     current_file = random.choice(dnn2_data)
@@ -115,12 +175,41 @@ for n in range(dnn2_utterances):
     sr = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(5))
 
     mixed, noise_new, clean_new = set_microphone_at_distance(clean, noise, fs, dist)
-    path_list = current_file.split(os.sep)
-    audio_path = os.path.join(dnn2_dataset_folder, "mix_%s_%s_%s" % (path_list[2], sr, os.path.basename(current_file)))
-    pp.write_audio(audio_path, mixed, fs)
 
-    clean_path = os.path.join(dnn2_dataset_folder, "clean_%s_%s_%s" % (path_list[2], sr, os.path.basename(current_file)))
-    pp.write_audio(clean_path, clean, fs)
+    # Print.
+    if n % 10 == 0:
+        print(n)
+
+    if save_single_files:
+        path_list = current_file.split(os.sep)
+        audio_path = os.path.join(dnn2_dataset_folder,
+                                  "mix_%s_%s_%s" % (path_list[2], sr, os.path.basename(current_file)))
+
+        clean_path = os.path.join(dnn2_dataset_folder,
+                                  "clean_%s_%s_%s" % (path_list[2], sr, os.path.basename(current_file)))
+        pp.write_audio(audio_path, mixed, fs)
+        pp.write_audio(clean_path, clean_new, fs)
+
+    else:
+        clean_all.append(clean_new)
+        mix_all.append(mixed)
+
+        clean_all_new = np.concatenate(clean_all, axis=0)
+        mix_all_new = np.concatenate(mix_all, axis=0)
+
+        if n % data_file_dimension == 0:
+            i += 1
+            # Write out data to .h5 file.
+            out_path = os.path.join(dnn2_dataset_folder, "data_mix_%s.h5" % str(i))
+            pp.create_folder(os.path.dirname(out_path))
+
+            with h5py.File(out_path, 'w') as hf:
+                hf.create_dataset('x', data=mix_all_new)
+                hf.create_dataset('y', data=clean_all_new)
+
+            clean_all = []
+            mix_all = []
+
 
 snr_file = open(os.path.join(dnn2_dataset_folder, mixed_snr), "wb")
 pickle.dump(distance2_list, snr_file)
