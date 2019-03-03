@@ -139,10 +139,10 @@ def pack_features(in_x, in_y, data_type):
         # if cnt == 3: break
         cnt += 1
 
-        if (na+1) % 250 == 0:
+        if (na+1) % conf.data_file_dimension == 0:
             i += 1
             # Write out data to .h5 file.
-            out_path = os.path.join(conf.packed_feature_dir, data_type, "data_%s.h5" % str(i))
+            out_path = os.path.join(conf.packed_feature_dir, data_type, "tf_data_%s.h5" % str(i))
             create_folder(os.path.dirname(out_path))
 
             with h5py.File(out_path, 'w') as hf:
