@@ -32,7 +32,7 @@ n_concat = 7
 n_hop= 3
 
 lr = 0.08                                               #learning rate
-iterations = 1000
+iterations = 52000
 batch_size = 512
 
 # print("%d iterations / epoch" % int(tr_x.shape[0] / batch_size))

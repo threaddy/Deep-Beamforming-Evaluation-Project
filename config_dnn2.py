@@ -15,7 +15,7 @@ model_dir = os.path.join("dnn2", "dnn2_packed_features", "models")
 noise_path = 'noise/babble.wav'
 fs = 16000
 
-create_new_database = True
+create_new_database = False
 save_single_files = False
 
 training_number = 1000
@@ -26,7 +26,7 @@ sample_rate = 16000
 
 
 lr = 0.08                                               #learning rate
-epochs = 100
+epochs = 1000
 batch_size = 32
 
 
