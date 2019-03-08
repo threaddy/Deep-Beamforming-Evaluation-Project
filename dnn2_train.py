@@ -1,20 +1,27 @@
 import numpy as np
 import os
-import pickle
 import time
-import h5py
+
 import math
 import random
 import string
+import sys
+import logging
+
+from get_gpu import get_gpu
+if sys.platform == 'linux':
+    gpuID = get_gpu()
+    logging.info("GPU ID:" + str(gpuID))
+
+
 
 from keras.models import Sequential
 from keras.layers import Dense, Dropout
 from keras.optimizers import SGD
 
 
-from sklearn import preprocessing
 from keras.callbacks import TensorBoard
-import tensorflow as tf
+
 
 import prepare_data as pp
 import dnn1_eval as dnn1
@@ -28,38 +35,6 @@ import config_dnn2 as conf2
 ########################################################################################################################################
 # FUNCTIONS
 ########################################################################################################################################
-def get_gpu():
-    import GPUtil
-    from tensorflow.python.keras import backend as K
-    # Get the first available GPU
-    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-    try:
-
-        DEVICE_ID = GPUtil.getAvailable(order='memory', limit=2, maxLoad=0.001, maxMemory=0.001)[0]
-
-    except:
-        print('GPU not compatible with NVIDIA-SMI')
-        DEVICE_ID = 'Not Found'
-    else:
-
-    # print(DEVICE_ID)
-    # DEVICE_ID = (1 + DEVICE_ID) % 2
-    # print(DEVICE_ID)
-    # Set CUDA_VISIBLE_DEVICES to mask out all other GPUs than the first available device id
-        os.environ["CUDA_VISIBLE_DEVICES"] = str(DEVICE_ID)
-        # sess = tf.Session(config=tf.ConfigProto())
-        config = tf.ConfigProto(intra_op_parallelism_threads=1, inter_op_parallelism_threads=1)
-       # config.gpu_options.allow_growth = True
-        sess = tf.Session(config=config)
-        K.set_session(sess)
-
-    finally:
-        # Since all other GPUs are masked out, the first available GPU will now be identified as GPU:0
-        # device = '/gpu:0'
-        print('Device ID (unmasked): ' + str(DEVICE_ID))
-        print('Device ID (masked): ' + str(0))
-
-    return DEVICE_ID
 
 
 def eval(model, gen, x, y):
@@ -121,7 +96,7 @@ def set_microphone_at_distance(clean_data, noise_data, framerate, distance):
     # mixed_data = VectorAdd(noise_data, clean_data/distance)     # attenuating clean speech at 1/distance rate and adding noise
     mixed_data = (new_noise_data + (clean_data / distance))     # attenuating clean speech at 1/distance rate and adding noise
 
-    final_s2nr = (clean_energy/distance)/(new_noise_energy + clean_energy/distance)            #calculating snr of attenuated speech
+    final_s2nr = (clean_energy/distance)/(new_noise_energy + clean_energy/distance)            #calculating s2nr of attenuated speech
 
 
     return mixed_data, new_noise_data, clean_data, final_s2nr
@@ -158,7 +133,7 @@ def prepare_database():
         mixed, noise_new, clean_new, s2nr = set_microphone_at_distance(clean, noise, conf2.fs, dist)
 
 
-        (_, enh) = dnn1.predict_file(current_file, model1, scaler1)
+        (_, enh, _) = dnn1.predict_file(current_file, model1, scaler1)
 
         # s2nr = 1 / (1 + (1 / float(snr)))
         snr2_list.append(s2nr)
@@ -218,7 +193,7 @@ def prepare_database():
 
         mixed, noise_new, clean_new, s2nr = set_microphone_at_distance(clean, noise, conf2.fs, dist)
 
-        (_, enh) = dnn1.predict_file(current_file, model1, scaler1)
+        (_, enh, _) = dnn1.predict_file(current_file, model1, scaler1)
 
         # s2nr = 1 / (1 + (1 / float(snr)))
         snr2_list.append(s2nr)
@@ -332,7 +307,10 @@ tsbd = TensorBoard(log_dir=conf2.logs)
 model.compile(loss='mean_absolute_error',
               optimizer=SGD(lr=conf2.lr, momentum=0.0, decay=0.0015))
 
-model.fit(tr_x, tr_y_s2nr, epochs=conf2.epochs, batch_size=conf2.batch_size, callbacks=[tsbd])
+model.fit(tr_x, tr_y_s2nr, epochs=conf2.epochs, batch_size=conf2.batch_size,
+          validation_data=(te_x, te_y_s2nr), callbacks=[tsbd])
+
+
 test_loss = model.evaluate(te_x, te_y_s2nr)
 print("\n Test_loss: %s \n" % test_loss)
 
@@ -340,7 +318,7 @@ print("\n Test_loss: %s \n" % test_loss)
 print("Training time: %s s" % (time.time() - t1,))
 
 
-model_path = os.path.join(conf2.model_dir, "md_%diters.h5" % conf2.epochs)
+model_path = os.path.join(conf2.model_dir, "md_%epochs.h5" % conf2.epochs)
 model.save(model_path)
 print("Saved model to %s" % model_path)
 
