@@ -151,7 +151,7 @@ def predict_file(file_path, model, scaler):
     # audio_path = os.path.dirname(file_path)
     # pp.write_audio(audio_path, s, conf1.sample_rate)
 
-    return mixed_complex, pred
+    return mixed_complex, pred, s
 
 
 
