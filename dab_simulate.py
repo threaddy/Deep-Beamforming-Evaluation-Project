@@ -88,9 +88,13 @@ def guess_microphone(source_position, mic_distance):
 
 def add_noise(clean_data, att_data):
     (_, noise_data) = wavfile.read(noise_path)
-    noise_data = np.asarray(noise_data, dtype=np.int16)
+    noise_data = np.asarray(noise_data, dtype=np.float64)
+    noise_data = pra.utilities.normalize(noise_data, bits=16)
 
-    meter_snr = 10 ** (15 / 20)  # chosen snr at one meter distance (15 dB)
+    # clean_data = np.asarray(clean_data, dtype=np.float64)
+    # clean_data = pra.utilities.normalize(clean_data, bits=16)
+
+    meter_snr = 10 ** (10 / 20)  # chosen snr at one meter distance (15 dB)
     clean_energy = 0
     noise_energy = 0
 
@@ -121,6 +125,21 @@ def add_noise(clean_data, att_data):
     return mixed_data
 
 
+def rephase(enh_signals, m_distances, framerate):
+
+    sound_speed = 343
+
+    for (s, d) in zip(enh_signals, m_distances):
+        frame_delay = int(math.ceil(framerate * d / sound_speed))  # compute number of frame to delay
+        delay_silence = np.zeros(frame_delay)
+        s = np.append(delay_silence, s)
+
+    return enh_signals
+
+
+
+
+
 
 
 
@@ -144,13 +163,6 @@ def DS_generate(source_audio, out_folder, name):
         print(mic_position)
         if (0 <= mic_position[0] <= room_dimensions[0]) and (0 <= mic_position[1] <= room_dimensions[1]):
             mic_in_room = True
-
-
-    # p1, p2, p3, p4 = map(sympy.Point, [(0, 0), (room_dimensions[0], 0), (0, room_dimensions[1]), (room_dimensions[0], room_dimensions[1])])
-    # rect = sympy.Polygon(p1, p2, p3, p4)
-    # circ = sympy.Circle(sympy.Point(room_dimensions[0]/2, room_dimensions[1]/2), 5)
-    # inters = rect.intersection(circ)
-    # print()
 
 
     # source and mic locations
@@ -183,7 +195,7 @@ def DB_generate(source_audio, out_folder, name):
 
     #source_audio = pra.normalize(source_audio, bits=16)
 
-    mic_distance = random.randint(1, 20)                   # mean distance from source to microphones
+    mic_distance = 5 # random.randint(1, 20)                   # mean distance from source to microphones
     source_position = np.array([random.uniform(0, room_dimensions[0]), random.uniform(0, room_dimensions[1])])
 
     # random way: guess array center until it's in the room: very long time for small rooms
@@ -195,7 +207,8 @@ def DB_generate(source_audio, out_folder, name):
         if (0 <= mic_center[0] <= room_dimensions[0]) and (0 <= mic_center[1] <= room_dimensions[1]):
             mic_in_room = True
 
-    # number of microphones
+
+    # number of lateral microphones
     M = 4
     # counterclockwise rotation of array:
     phi = 0
@@ -204,6 +217,12 @@ def DB_generate(source_audio, out_folder, name):
 
     mic_pos = pra.beamforming.linear_2D_array(mic_center, M, phi, d)
     mic_pos = np.concatenate((mic_pos, np.array(mic_center, ndmin=2).T), axis=1)
+
+    distances = []
+    for m in range(M):
+        d = math.sqrt((source_position[0] - mic_pos[0, m])**2 + (source_position[1] - mic_pos[1, m])**2)
+        distances.append(d)
+
 
     # create room
     shoebox = pra.ShoeBox(
@@ -240,25 +259,36 @@ def DB_generate(source_audio, out_folder, name):
     (model1, scaler1) = dnn1.load_dnn()
     enh_all = []
     for n in range(M+1):
-        signal = shoebox.mic_array.signals[n, :]
+        signal = np.asarray(shoebox.mic_array.signals[n, :], dtype=float)
+        signal = pra.utilities.normalize(signal, bits=16)
+
         mixed_signal = add_noise(source_audio, signal)
-        mixed_signal = pra.utilities.normalize(mixed_signal, bits=16)
+
         mixed_signal = np.array(mixed_signal, dtype=np.int16)
 
         mixed_file = os.path.join(out_folder, 'mix%d_%s' % (n, name))
         pp.write_audio(mixed_file, mixed_signal, fs)
 
         (_, _, enh_signal) = dnn1.predict_file(mixed_file, model1, scaler1)
-
-        enh_all.append(enh_signal)
+        enh_signal = pra.utilities.normalize(enh_signal, bits=16)
+        enh_signal = np.array(enh_signal, dtype=np.int16)
 
         enh_file = os.path.join(out_folder, 'enh%d_%s' % (n, name))
         pp.write_audio(enh_file, enh_signal, fs)
 
+
+        enh_signal = np.array(enh_signal, dtype=np.float64)
+
+        enh_all.append(enh_signal)
+
+
+
+    enh_all = rephase(enh_all, distances, fs)
+
     # update microphone signals with enhanced signals
     new_mics = pra.Beamformer(mic_pos, shoebox.fs)
     new_mics.record(np.asarray(enh_all), shoebox.fs)
-    shoebox.mic_array = new_mics
+    #shoebox.mic_array = new_mics
 
     #re-calculating beamforming
     # new_mics.rake_delay_and_sum_weights(shoebox.sources[0])
@@ -269,7 +299,9 @@ def DB_generate(source_audio, out_folder, name):
     # shoebox.simulate()
 
     #calculating beamformed signal
-    signal_das = new_mics.process(FD=False)
+    beam_signal = new_mics.process(FD=False)
+
+    # beam_signal = pra.normalize(pra.highpass(beam_signal, fs))
 
     # fig, ax = shoebox.plot(freq=[500, 1000, 2000, 4000], img_order=0)
     # ax.legend(['500', '1000', '2000', '4000'])
@@ -282,12 +314,12 @@ def DB_generate(source_audio, out_folder, name):
     plt.subplot(211)  # the first subplot in the first figure
     plt.plot(source_audio)
     plt.subplot(212)  # the second subplot in the first figure
-    plt.plot(signal_das)
+    plt.plot(beam_signal)
     plt.show()
 
     final_file = os.path.join(out_folder, 'final_%s' % name)
     # signal_das = pra.normalize(signal_das, bits=16)
-    wavfile.write(final_file, fs, signal_das)
+    wavfile.write(final_file, fs, beam_signal)
 
 
 
@@ -334,7 +366,7 @@ def DAB_generate(source_audio, out_folder, name):
     # shoebox.add_source(interferer, delay=0., signal=noise_data[:len(source_audio)])
     shoebox.add_microphone_array(mics)
     #mics.rake_delay_and_sum_weights(shoebox.sources[0])
-    new_mvdr(mics, shoebox.sources[0])
+    # new_mvdr(mics, shoebox.sources[0])
 
     shoebox.compute_rir()
     shoebox.simulate()
@@ -344,20 +376,26 @@ def DAB_generate(source_audio, out_folder, name):
     (model1, scaler1) = dnn1.load_dnn()
     enh_all = []
     for n in range(M):
-        signal = shoebox.mic_array.signals[n, :]
+        signal = np.asarray(shoebox.mic_array.signals[n, :], dtype=float)
+        signal = pra.utilities.normalize(signal, bits=16)
+
         mixed_signal = add_noise(source_audio, signal)
-        mixed_signal = pra.utilities.normalize(mixed_signal, bits=16)
+
         mixed_signal = np.array(mixed_signal, dtype=np.int16)
 
         mixed_file = os.path.join(out_folder, 'mix%d_%s' % (n, name))
         pp.write_audio(mixed_file, mixed_signal, fs)
 
         (_, _, enh_signal) = dnn1.predict_file(mixed_file, model1, scaler1)
+        enh_signal = pra.utilities.normalize(enh_signal, bits=16)
+        enh_signal = np.array(enh_signal, dtype=np.int16)
+
+        enh_file = os.path.join(out_folder, 'enh%d_%s' % (n, name))
+        pp.write_audio(enh_file, enh_signal, fs)
+
+        enh_signal = np.array(enh_signal, dtype=np.float64)
 
         enh_all.append(enh_signal)
-
-        enh_file = os.path.join(out_folder , 'enh%d_%s' % (n, name))
-        pp.write_audio(enh_file, enh_signal, fs)
 
     # ESTIMATING S2NR USING DNN2
     s2nrs = dnn2.predict(out_folder, out_folder)
@@ -457,5 +495,5 @@ for f in sources:
     pp.create_folder(DAB_folder)
 
     #DS_generate(audio_anechoic, DS_folder, f)
-    DB_generate(audio_anechoic, DB_folder, f)
-    #DAB_generate(audio_anechoic, DAB_folder, f)
+    #DB_generate(audio_anechoic, DB_folder, f)
+    DAB_generate(audio_anechoic, DAB_folder, f)
