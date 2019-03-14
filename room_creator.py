@@ -1,156 +1,68 @@
-from __future__ import print_function
+import math
+import random
 import numpy as np
-import pyroomacoustics as pra
-from scipy.io import wavfile
 import prepare_data as pp
 import os
-import random
-import math
-import sympy
-
-working_dir = "test_speech/"
 
 
+def set_microphone_at_distance(clean_data, noise_data, framerate, distance):
+    meter_snr = 10 ** (15 / 20)  # chosen snr at one meter distance (15 dB)
+    clean_energy = 0
+    noise_energy = 0
+    sound_speed = 343
+
+    frame_delay = int(math.ceil(framerate * distance / sound_speed))  # compute number of frame to delay
+
+    delay_silence = np.zeros(frame_delay)
+    clean_data = np.append(delay_silence, clean_data)           # add delay to attenuated speech
+
+    shift = random.randint(0, abs(len(clean_data) - len(
+        noise_data)))                                           # calculate random shift for noise in the possible range, to avoid "overflows"
+
+    n = min(len(clean_data), len(noise_data))
+    clean_data = clean_data[0:n]
+    noise_data = noise_data[shift:(n + shift)]
+
+    for t in clean_data:
+        clean_energy = clean_energy + abs(t)
+
+    for t in noise_data:
+        noise_energy = noise_energy + abs(t)
+
+    first_snr = clean_energy / noise_energy
+    snr_ratio = meter_snr / first_snr
+    new_noise_data = noise_data / snr_ratio                      # normalizing snr level at 15 db at one meter distance
+    new_noise_energy = noise_energy/snr_ratio                   # updating noisy energy after normalization
+
+    # mixed_data = VectorAdd(noise_data, clean_data/distance)     # attenuating clean speech at 1/distance rate and adding noise
+    mixed_data = (new_noise_data + (clean_data / distance))     # attenuating clean speech at 1/distance rate and adding noise
+
+    final_s2nr = (clean_energy/distance)/(new_noise_energy + clean_energy/distance)            #calculating s2nr of attenuated speech
 
 
-def DS_generate(source_audio, room_dimensions, out_folder, name):
-
-    # Create the shoebox
-    shoebox = pra.ShoeBox(
-        room_dimensions,
-        absorption=1.0,
-        fs=fs,
-        max_order=15,
-    )
-    mic_distance = random.randint(1, 20)                   # distance from source to microphone
-    source_position = np.array([random.uniform(0, room_dimensions[0]), random.uniform(0, room_dimensions[1])])
-
-    # random way: guess microphone position until it's in the room: very long time for small rooms
-    # mic_in_room = False
-    # while mic_in_room == False:
-    #     theta = random.uniform(0, 2 * math.pi)
-    #     mic_position = source_position - mic_distance * np.array([math.cos(theta), math.sin(theta)])
-    #     print(mic_position)
-    #     if (0 <= mic_position[0] <= room_dimensions[0]) and (0 <= mic_position[1] <= room_dimensions[1]):
-    #         mic_in_room = True
-    #
-
-    p1, p2, p3, p4 = map(sympy.Point, [(0, 0), (room_dimensions[0], 0), (0, room_dimensions[1]), (room_dimensions[0], room_dimensions[1])])
-    rect = sympy.Polygon(p1, p2, p3, p4)
-    circ = sympy.Circle(sympy.Point(room_dimensions[0]/2, room_dimensions[1]/2), 5)
-    inters = rect.intersection(circ)
-    print()
+    return mixed_data, new_noise_data, clean_data, final_s2nr
 
 
+def create_room(source_file, noise_file):
+    dist = [2, 4, 8, 20]
+    (clean, fs) = pp.read_audio(source_file)
+    (noise, _) = pp.read_audio(noise_file)
+
+    for n in range(len(dist)):
+
+        mixed, noise_new, clean_new, s2nr = set_microphone_at_distance(clean, noise, fs, dist[n])
+
+        # s2nr = 1 / (1 + (1 / float(snr)))
+
+        mixed_name = "mix_%s_%s" % (str(dist[n]), os.path.basename(source_file))
+        clean_name = "clean_%s_%s" % (str(dist[n]), os.path.basename(source_file))
 
 
+        mixed_path = os.path.join('data_eval/dnn1_in', mixed_name)
+        clean_path = os.path.join('data_eval/dnn1_in', clean_name)
+
+        pp.write_audio(mixed_path, mixed, fs)
+        #pp.write_audio(clean_path, clean_new, fs)
 
 
-
-
-
-    # # source and mic locations
-    # shoebox.add_source(source_position, signal=source_audio)
-    # shoebox.add_microphone_array(
-    #     pra.MicrophoneArray(
-    #         np.array([mic_position]).T,
-    #         shoebox.fs)
-    # )
-    #
-    # shoebox.simulate()
-    # shoebox.mic_array.to_wav(os.path.join(out_folder + '_DS', 'mix_' + name), norm=True, bitdepth=np.int16)
-
-
-
-def DB_generate(source_audio, room_dimensions, out_folder, name):
-    mic_distance = random.randint(1, 20)                   # mean distance from source to microphones
-    source_position = np.array([random.uniform(0, room_dimensions[0]), random.uniform(0, room_dimensions[1])])
-    theta = random.uniform(0, 2 * math.pi)
-
-    # random way: guess array center until it's in the room: very long time for small rooms
-    mic_in_room = False
-    while mic_in_room == False:
-        theta = random.uniform(0, 2 * math.pi)
-        mic_center = source_position - mic_distance * np.array([math.cos(theta), math.sin(theta)])
-        print(mic_center)
-        if (0 <= mic_center[0] <= room_dimensions[0]) and (0 <= mic_center[1] <= room_dimensions[1]):
-            mic_in_room = True
-
-    # number of microphones
-    M = 4
-    # counterclockwise rotation of array:
-    phi = 0
-    # distance between microphones
-    d = 0.4
-
-    mics = pra.beamforming.linear_2D_array(mic_center, M, phi, d)
-
-    # create room
-    shoebox = pra.ShoeBox(
-        room_dimensions,
-        absorption=wall_absorption,
-        fs=fs,
-        max_order=15,
-    )
-
-    # source and mic locations
-    shoebox.add_source(source_position, signal=source_audio)
-    shoebox.add_microphone_array(
-        pra.MicrophoneArray(
-            mics,
-            shoebox.fs)
-    )
-
-    shoebox.simulate()
-    shoebox.mic_array.to_wav(os.path.join(out_folder + '_DB', 'mix_' + name), norm=True, bitdepth=np.int16)
-
-def DAB_generate(source_audio, room_dimensions, out_folder, name):
-
-    source_position = np.array([random.uniform(0, room_dimensions[0]), random.uniform(0, room_dimensions[1])])
-
-
-
-
-    shoebox = pra.ShoeBox(
-        room_dimensions,
-        absorption=wall_absorption,
-        fs=fs,
-        max_order=15,
-    )
-
-    # source and mic locations
-    shoebox.add_source(source_position, signal=source_audio)
-    shoebox.add_microphone_array(
-        pra.MicrophoneArray(
-            mics,
-            shoebox.fs)
-    )
-
-    shoebox.simulate()
-    shoebox.mic_array.to_wav(os.path.join(out_folder + '_DB', 'mix_' + name), norm=True, bitdepth=np.int16)
-
-
-###################################################################################################
-# RUN ON ALL FILE
-###################################################################################################
-
-# room parameters
-room_dim = [20, 20]
-wall_absorption = 0.2
-
-
-sources = [f for f in sorted(os.listdir(working_dir)) if f.endswith("wav")]
-
-
-for f in sources:
-    file_path = os.path.join(working_dir, f)
-    fs, audio_anechoic = wavfile.read(file_path)
-
-    out_folder = working_dir + os.path.splitext(f)[0]
-    pp.create_folder(out_folder + '_DS')
-    pp.create_folder(out_folder + '_DB')
-    pp.create_folder(out_folder + '_DAB')
-
-    DS_generate(audio_anechoic, room_dim, out_folder, f)
-    # DB_generate(audio_anechoic, room_dim, out_folder, f)
-    # DAB_generate(audio_anechoic, room_dim, out_folder, f)
+create_room('data_eval/sa1.wav', 'noise/babble.wav')
