@@ -3,7 +3,6 @@ import os
 import h5py
 import time
 import soundfile
-import tables
 
 from scipy import signal
 
@@ -118,7 +117,7 @@ def pack_features(in_x, in_y, data_type):
 
         # Cut input spectrogram to 3D segments with n_concat.
         mixed_x_3d = mat_2d_to_3d(in_x[na], agg_num=conf.n_concat, hop=conf.n_hop)
-        mixed_x_3d= log_sp(mixed_x_3d).astype(np.float32)
+        mixed_x_3d = log_sp(mixed_x_3d).astype(np.float32)
         x_all.append(mixed_x_3d)
 
         # Cut target spectrogram and take the center frame of each 3D segment.
@@ -142,7 +141,7 @@ def pack_features(in_x, in_y, data_type):
         if (na+1) % conf.data_file_dimension == 0:
             i += 1
             # Write out data to .h5 file.
-            out_path = os.path.join(conf.packed_feature_dir, data_type, "tf_data_%s.h5" % str(i))
+            out_path = os.path.join(conf.packed_feature_dir, data_type, "tf_data_%s.h5" % (str(int(time.time()))))
             create_folder(os.path.dirname(out_path))
 
             with h5py.File(out_path, 'w') as hf:

@@ -308,11 +308,12 @@ t1 = time.time()
 if conf1.create_new_database:
     num_tr, num_te = prepare_database()
 
-else:
-    num_tr = len([f for f in os.listdir(os.path.join(conf1.data_train_dir))
-                                       if f.endswith('.h5')])
-    num_te = len([f for f in os.listdir(conf1.data_test_dir)
-                                       if f.endswith('.h5')])
+h5_train_list = [f for f in os.listdir(conf1.data_train_dir)
+                                       if f.endswith('.h5')]
+# num_tr = len(h5_train_list)
+
+h5_test_list = [f for f in os.listdir(conf1.data_test_dir)
+                                       if f.endswith('.h5')]
 
 
 tr_x = []
@@ -320,13 +321,13 @@ tr_y = []
 te_x = []
 te_y = []
 
-for i in range(num_tr):
-    tr_x_t, tr_y_t = pp.load_hdf5(os.path.join(conf1.data_train_dir, "tf_data_%s.h5" % str(i+1)))
+for i in h5_train_list:
+    tr_x_t, tr_y_t = pp.load_hdf5(os.path.join(conf1.data_train_dir, i))
     tr_x.append(tr_x_t)
     tr_y.append(tr_y_t)
 
-for i in range(num_te):
-    te_x_t, te_y_t = pp.load_hdf5(os.path.join(conf1.data_test_dir, "tf_data_%s.h5" % str(i+1)))
+for i in h5_test_list:
+    te_x_t, te_y_t = pp.load_hdf5(os.path.join(conf1.data_test_dir, i))
     te_x.append(te_x_t)
     te_y.append(te_y_t)
 
