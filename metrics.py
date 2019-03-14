@@ -294,10 +294,10 @@ def prob_std():
 
 if debug == True:
     # plot_training_stat(training_stats1, 0, 100, 10)
-    calculate_pesq('data_eval/sa1.wav', 'data_eval/sa1/_DAB')
+    calculate_pesq('data_eval/sa1.wav', 'data_eval/dab')
     get_pesq_stats()
-    stoi_res = calc_stoi('data_eval/sa1.wav', 'data_eval/sa1/_DAB')
-    sdr_res = calc_sdr('data_eval/sa1.wav', 'data_eval/sa1/_DAB')
+    #stoi_res = calc_stoi('data_eval/sa1.wav', 'data_eval/dab')
+    sdr_res = calc_sdr('data_eval/sa1.wav', 'data_eval/dab')
 
     room_dims = [30, 30]
     iterations = 50000
