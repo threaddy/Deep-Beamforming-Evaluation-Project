@@ -11,11 +11,13 @@ import matplotlib.pyplot as plt
 
 output_file_folder = "data_eval/dab"
 
-def visualize(mixed_x, pred):
+def visualize(mat1, mat2, title1='title', title2='title'):
     fig, axs = plt.subplots(2, 1, sharex=False)
-    axs[0].matshow(mixed_x.T, origin='lower', aspect='auto', cmap='jet')
-    axs[1].matshow(pred.T, origin='lower', aspect='auto', cmap='jet')
-    axs[1].set_title("Enhanced speech log spectrogram")
+    axs[0].matshow(mat1.T, origin='lower', aspect='auto', cmap='jet')
+    axs[1].matshow(mat2.T, origin='lower', aspect='auto', cmap='jet')
+    axs[0].set_title(title1)
+    axs[1].set_title(title2)
+
     for j1 in range(2):
         axs[j1].xaxis.tick_bottom()
     plt.tight_layout()
@@ -43,11 +45,9 @@ def channel_weights(input_s2nrs):
 
 def mvdr(mix_audios, enh_audios, reweighted_audios):
 
+    # get maximum t_f shapes
     x_max = 0
     y_max = 0
-
-
-    # get maximum t_f shapes
     for f in enh_audios:
         if f.shape[0] > x_max:
             x_max = f.shape[0]
@@ -84,27 +84,13 @@ def mvdr(mix_audios, enh_audios, reweighted_audios):
         mix_pad.append(t)
     mix_pad = np.asarray(mix_pad)
 
-
-
-
-    # calculate enhanced mask and noise mask
-    epsilon = np.ones((x_max, y_max))
-    eta = np.ones((x_max, y_max))
+    # calculate noise
     noise_pad = []
-
     for c, d in zip(rw_pad, mix_pad):
-        alpha = np.divide(c, d, out=np.zeros_like(c), where=d != 0)
-        epsilon = np.multiply(epsilon, alpha)   # enh mask
-        beta = np.ones(eta.shape) - alpha
-        eta = np.multiply(eta, beta)            # noise mask
-
-
         noise_pad.append(d - c)
-
     noise_pad = np.asarray(noise_pad)
 
-
-
+    # calculate noise covariance matrix
     phinn = np.ones((channel_num, channel_num, rw_pad.shape[2]), dtype=complex)
     for a in range(channel_num):
         for b in range(channel_num):
@@ -112,14 +98,14 @@ def mvdr(mix_audios, enh_audios, reweighted_audios):
             t2 = np.average(temp, axis=0)
             phinn[a, b] = t2
 
+    # calculate re-weigheted audio covariance matrix
     phixx = np.ones((channel_num, channel_num, rw_pad.shape[2]), dtype=complex)
     for a in range(channel_num):
         for b in range(channel_num):
             temp = np.multiply(rw_pad[a], rw_pad[b].conj())
             phixx[a, b] = np.average(temp, axis=0)
 
-
-
+    # calculate new MVDR weights
     w_opt = []
     for f in range(y_max):
         phinn_f = phinn[:, :, f]
@@ -132,33 +118,29 @@ def mvdr(mix_audios, enh_audios, reweighted_audios):
         w_opt_f = np.divide(w_num_f, w_den_f)
         w_opt.append(w_opt_f)
 
-
-
-    # estimated covariance matrix for speech
-
     w_opt = np.asarray(w_opt)
-    print(w_opt)
 
-    # w_opt = np.ones((channel_num, y_max))
+    # apply weights to each channel
     final_audios = np.zeros(enh_pad.shape, dtype=complex)
     for i in range(channel_num):
         for j in range(x_max):
             final_audios[i][j] = np.multiply(w_opt[:, i], rw_pad[i][j, :])
-
+    # combine channels
     final = np.sum(final_audios, axis=0)
 
-
-
+    # cut off padded values
     final_cut = final[0:(final.shape[0] - max(pad_lenght_x)), 0:(final.shape[1] - max(pad_lenght_y))]
 
-    visualize(np.abs(rw_pad[0]), np.abs(mix_pad[0]))
+    visualize(np.abs(rw_pad[0]), np.abs(mix_pad[0]), "reweighted amplitude", "mixed amplitude")
     # visualize(np.abs(enh_pad[0]), np.abs(rw_pad[0]))
     # visualize(np.abs(enh_pad[0]), np.abs(final_cut))
     #
-    visualize(np.imag(enh_pad[0]), np.imag(final_cut))
-    visualize(np.abs(rw_pad[0]), np.abs(final_cut))
+    visualize(np.imag(enh_pad[0]), np.imag(final_cut), "enh imaginary", "final imaginary")
+    visualize(np.abs(rw_pad[0]), np.abs(final_cut), "reweighted amplitude", "final amplitude")
 
     return np.asarray(final_cut)
+
+
 
 
 ########################################################################################################################
@@ -175,11 +157,6 @@ for (cnt, na) in enumerate(names):
     (a, _) = pp.read_audio(file_path)
     enh_complex = pp.calc_sp(a, 'complex')
     dnn1_outputs.append(enh_complex)
-
-
-
-
-
 
 
 # s2nrs = dnn2.predict("data_eval/dnn1_in", "data_eval/dnn1_out")
@@ -200,14 +177,6 @@ channel_num = len(dnn1_outputs)
 
 # multiply enhanced audio for the corresponding weight
 ch_rw_outputs = []
-# for i in range(len(dnn1_outputs)):
-#     if new_weights[i] != 0:
-#         ch_rw_outputs.append(new_weights[i] * dnn1_outputs[i])
-#     else:
-#         dnn1_inputs = np.delete(dnn1_inputs, i)
-#         dnn1_inputs = np.delete(dnn1_inputs, i)
-
-
 for i, p in zip(dnn1_outputs, new_weights):
     ch_rw_outputs.append(p * i)
 
@@ -216,34 +185,23 @@ for i, p in zip(dnn1_outputs, new_weights):
 init_sp = pp.calc_sp(init, mode='complex')
 
 
-
 # execute mvdr
 final = mvdr(dnn1_inputs, dnn1_outputs, ch_rw_outputs)
 
-visualize(np.abs(init_sp), np.abs(final))
+
+visualize(np.abs(init_sp), np.abs(final), "source amplitude", "final amplitude")
 
 # Recover and save enhanced wav
 pp.create_folder(output_file_folder)
-
-final_sp = np.exp(np.negative(np.abs(final)))
-
 s = recover_wav_complex(final, conf1.n_overlap, np.hamming)
 s *= np.sqrt((np.hamming(conf1.n_window) ** 2).sum())  # Scaler for compensate the amplitude
 s_sp = pp.calc_sp(s, mode='complex')
-
-
-
-
 audio_path = os.path.join(output_file_folder, "dab_out.wav")
 pp.write_audio(audio_path, s, conf1.sample_rate)
 
-(output, _) = pp.read_audio(os.path.join(output_file_folder, "dab_out.wav"))
+final_sp = np.exp(np.negative(np.abs(final)))
 
-output_sp = pp.calc_sp(output, 'magnitude')
-
-
-
-print('done DAB')
+print('DAB done')
 
 
 ########################################################################################################################
