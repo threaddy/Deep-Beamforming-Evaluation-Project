@@ -41,7 +41,7 @@ def query_yes_no(question, default="yes"):
 
 
 def set_microphone_at_distance(clean_data, noise_data, framerate, distance):
-    meter_snr = 10 ** (25 / 20)  # chosen snr at one meter distance (15 dB)
+    meter_snr = 10 ** (15 / 20)  # chosen snr at one meter distance (15 dB)
     clean_energy = 0
     noise_energy = 0
     sound_speed = 343
@@ -117,7 +117,7 @@ while go_on == True:
     dist = list(map(int, dist))
     d_mean = math.ceil(sum(dist)/len(dist))
 
-    mode = input('Insert algorithm to use (dab or db): ')
+    snr = [5.62/d for d in dist]
 
     source_files = [f for f in os.listdir(speech_dir)
                     if f.endswith(".wav")]
@@ -125,15 +125,56 @@ while go_on == True:
     # executing for all source speeches in speech folder
     for f in source_files:
         create_room(os.path.join(speech_dir, f), 'noise/babble.wav', dist)
-        dab_run(f, mode=mode)
+        dab_run(snr, f, mode='dab')
+        dab_run(snr, f, mode='db')
 
+
+
+    print("--------NOiSY----------------------------------\n -------------")
+    # calculating speech-per-speech indexes
+    m.calculate_pesq_couple(speech_dir, 'data_eval/dnn1_in')
+    avg_pesqs_N, std_pesqs_N = m.get_pesq_stats()
+    avg_stoi_N, std_stoi_N = m.calc_stoi_couple(speech_dir, 'data_eval/dnn1_in')
+    avg_sdr_N, std_sdr_N = m.calc_sdr_couple(speech_dir, 'data_eval/dnn1_in')
+
+
+    print("--------DS-------------------------------------\n -------------")
+    # calculating speech-per-speech indexes
+    m.calculate_pesq_couple(speech_dir, 'data_eval/dnn1_out')
+    avg_pesqs_DS, std_pesqs_DS = m.get_pesq_stats()
+    avg_stoi_DS, std_stoi_DS = m.calc_stoi_couple(speech_dir, 'data_eval/dnn1_out')
+    avg_sdr_DS, std_sdr_DS = m.calc_sdr_couple(speech_dir, 'data_eval/dnn1_out')
+
+    print("--------DB-------------------------------------\n -------------")
+    m.calculate_pesq_couple(speech_dir, 'data_eval/db')
+    avg_pesqs_DB, std_pesqs_DB = m.get_pesq_stats()
+    avg_stoi_DB, std_stoi_DB = m.calc_stoi_couple(speech_dir, 'data_eval/db')
+    avg_sdr_DB, std_sdr_DB = m.calc_sdr_couple(speech_dir, 'data_eval/db')
+
+    print("--------DAB------------------------------------\n -------------")
     # calculating speech-per-speech indexes
     m.calculate_pesq_couple(speech_dir, 'data_eval/dab')
-    avg_pesqs, std_pesqs = m.get_pesq_stats()
-    stoi_res = m.calc_stoi_couple(speech_dir, 'data_eval/dab')
-    sdr_res = m.calc_sdr_couple(speech_dir, 'data_eval/dab')
+    avg_pesqs_DAB, std_pesqs_DAB = m.get_pesq_stats()
+    avg_stoi_DAB, std_stoi_DAB = m.calc_stoi_couple(speech_dir, 'data_eval/dab')
+    avg_sdr_DAB, std_sdr_DAB = m.calc_sdr_couple(speech_dir, 'data_eval/dab')
 
+    print('-----------------------------------------------------------------------------------------------------------')
+    print('INDEX:\t STOI\t PESQ\t SDR\t ---------------------------------------------------------------------------')
+    print('Noisy \t %f(%f) \t %f(%f) \t %f(%f)' % (avg_stoi_N, std_stoi_N,
+                                                    avg_pesqs_N, std_pesqs_N,
+                                                    avg_sdr_N, std_sdr_N))
 
+    print('DS   \t %f(%f) \t %f(%f) \t %f(%f)' % (avg_stoi_DS, std_stoi_DS,
+                                                   avg_pesqs_DS, std_pesqs_DS,
+                                                   avg_sdr_DS, std_sdr_DS))
+
+    print('DB   \t %f(%f) \t %f(%f) \t %f(%f)' % (avg_stoi_DB, std_stoi_DB,
+                                                   avg_pesqs_DB, std_pesqs_DB,
+                                                   avg_sdr_DB, std_sdr_DB))
+
+    print('DAB \t %f(%f) \t %f(%f) \t %f(%f)' % (avg_stoi_DAB, std_stoi_DAB,
+                                                   avg_pesqs_DAB, std_pesqs_DAB,
+                                                   avg_sdr_DAB, std_sdr_DAB))
 
     room_dims = [30, 30]
     iterations = 10000

@@ -74,7 +74,7 @@ def calculate_pesq(input_file, out_speech_dir):
 
     for na_out in out_names:
         # Call executable PESQ tool.
-        cmd = ' '.join(["./pesq", input_file, na_out, "+16000"])
+        cmd = ' '.join(["./pesq", input_file, na_out, "+16000", "&> /dev/null"])
         os.system(cmd)
 
 
@@ -119,8 +119,8 @@ def calc_stoi_couple(in_speech_dir, out_speech_dir):
                  for na in sorted(os.listdir(out_speech_dir))
                  if na.endswith(".wav")]
     stoi_list = []
-    print("---------------------------------")
-    print("\t", "STOI", "\n")
+    # print("---------------------------------")
+    # print("\t", "STOI", "\n")
     for f, g in zip(in_names, out_names):
         (x, fs1) = pp.read_audio(f)
         (y, fs2) = pp.read_audio(g)
@@ -134,9 +134,9 @@ def calc_stoi_couple(in_speech_dir, out_speech_dir):
 
     avg_stoi = np.mean(stoi_list)
     std_stoi = np.std(stoi_list)
-    print("AVG STOI", avg_stoi)
-    print("ST DEV STOI", std_stoi)
-    print("---------------------------------")
+    print("AVG STOI\t", avg_stoi)
+    print("ST DEV STOI\t", std_stoi)
+    # print("---------------------------------")
     return avg_stoi, std_stoi
 
 def calc_stoi(in_file, out_speech_dir):
@@ -147,15 +147,11 @@ def calc_stoi(in_file, out_speech_dir):
     stoi_list = []
     print("---------------------------------")
     print("\t", "STOI", "\n")
-
-
     (x, fs1) = pp.read_audio(in_file)
 
     for f in out_names:
         print(f)
         (y, fs2) = pp.read_audio(f)
-
-
         if fs1 != fs2:
             print("Error: output and input files have different sampling rate")
 
@@ -166,8 +162,8 @@ def calc_stoi(in_file, out_speech_dir):
 
     avg_stoi = np.mean(stoi_list)
     std_stoi = np.std(stoi_list)
-    print("AVG STOI", avg_stoi)
-    print("ST DEV STOI", std_stoi)
+    print("AVG STOI\t", avg_stoi)
+    print("ST DEV STOI\t", std_stoi)
     print("---------------------------------")
     return avg_stoi, std_stoi
 
@@ -194,9 +190,9 @@ def calc_sdr_couple(in_speech_dir, out_speech_dir):
 
     avg_sdr = np.mean(sdr_list)
     std_sdr = np.std(sdr_list)
-    print("AVG SDR", avg_sdr)
-    print("ST DEV SDR", std_sdr)
-    print("---------------------------------")
+    print("AVG SDR\t", avg_sdr)
+    print("ST DEV SDR\t", std_sdr)
+    # print("---------------------------------")
     return avg_sdr, std_sdr
 
 
@@ -223,8 +219,8 @@ def calc_sdr(in_file, out_speech_dir):
 
     avg_sdr = np.mean(sdr_list)
     std_sdr = np.std(sdr_list)
-    print("AVG SDR", avg_sdr)
-    print("ST DEV SDR", std_sdr)
+    print("AVG SDR\t", avg_sdr)
+    print("ST DEV SDR\t", std_sdr)
     print("---------------------------------")
     return avg_sdr, std_sdr
 

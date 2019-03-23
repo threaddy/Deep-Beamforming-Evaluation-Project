@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 
 
 visualize_on = False
-output_file_folder = "data_eval/dab"
+
 
 def visualize(mat1, mat2, title1='title', title2='title'):
     if visualize_on:
@@ -40,7 +40,7 @@ def dnn1_colors(input):
 def channel_weights(input_s2nrs):
     b = []
     qx = max(input_s2nrs)
-    gamma = 0.1  # tunable threshold
+    gamma = 0.5  # tunable threshold
 
     for qi in input_s2nrs:
         thresh = (float(qi) * (1 - float(qx))) / (float(qx) * (1 - float(qi)))
@@ -153,7 +153,9 @@ def mvdr(mix_audios, reweighted_audios):
 ########################################################################################################################
 # DAB
 ########################################################################################################################
-def dab_run(file_name="dab_out", mode='dab'):
+def dab_run(snr_list, file_name="dab_out", mode='dab'):
+
+    output_file_folder = os.path.join("data_eval", mode)
 
     # removing previous enhancements
     for file in os.listdir(os.path.join("data_eval", "dnn1_out")):
@@ -175,24 +177,25 @@ def dab_run(file_name="dab_out", mode='dab'):
     # s2nrs = dnn2.predict("data_eval/dnn1_in", "data_eval/dnn1_out")
 
     # snr = np.array([5.62, 1.405, 0.703, 0.281])
-    snr = np.array([5.62, 2.81, 1.875, 1.406])
-    s2nrs = snr
-    for i in range(len(snr)):
-        s2nrs[i] = 1/(1+1/snr[i])
+    # snr = np.array([5.62, 2.81, 1.875, 1.406])
+    s2nrs = snr_list * 1
+    for i in range(len(snr_list)):
+        s2nrs[i] = 1/(1+1/snr_list[i])
 
-
-    # calculate channel weights
-    new_weights = channel_weights(s2nrs)
-    print(new_weights)
-
-
-    # multiply enhanced audio for the corresponding weight
     ch_rw_outputs = []
-    for i, p in zip(dnn1_outputs, new_weights):
-        ch_rw_outputs.append(p * i)
+    # calculate channel weights
+    if mode == 'dab':
+        new_weights = channel_weights(s2nrs)
+        print(new_weights)
+        # multiply enhanced audio for the corresponding weight
+        for i, p in zip(dnn1_outputs, new_weights):
+            ch_rw_outputs.append(p * i)
+
 
     # cancel reweighting if db mode
     if mode == 'db':
+        new_weights = s2nrs
+        print(new_weights)
         ch_rw_outputs = dnn1_outputs
 
     # execute mvdr
@@ -207,11 +210,8 @@ def dab_run(file_name="dab_out", mode='dab'):
     pp.create_folder(output_file_folder)
     s = recover_wav_complex(final, conf1.n_overlap, np.hamming)
     s *= np.sqrt((np.hamming(conf1.n_window) ** 2).sum())  # Scaler for compensate the amplitude
-    s_sp = pp.calc_sp(s, mode='complex')
     audio_path = os.path.join(output_file_folder, file_name)
     pp.write_audio(audio_path, s, conf1.sample_rate)
-
-    final_sp = np.exp(np.negative(np.abs(final)))
 
     print('%s done' % mode)
 
