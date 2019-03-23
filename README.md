@@ -9,6 +9,7 @@ DNNs can be trained using Timit dataset. MVDR is used in the DAB script, to gene
 
 Execute dnn1_train.py and dnn2_train.py for training. In dnn1_config and dnn2_config are training parameters su as epochs and number of istances to generate. 
 
+Instructions:
 Execute simulate_anechoic.py to create a microphone setup, simulate acquisitions and running DAB or classical Deep Beamforming. 
 Multiple speech file can be used as source. The script returns average and standard devation for PESQ, STOI AND SDR indexes, for every sources. 
 Write "visualize_on = true" at the beginning of dab.py to visualize plots during dab execution.
