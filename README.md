@@ -14,3 +14,5 @@ Instructions:
 Execute simulate_anechoic.py to create a microphone setup, simulate acquisitions and running DAB or classical Deep Beamforming. 
 Multiple speech file can be used as source. The script returns average and standard devation for PESQ, STOI AND SDR indexes, for every sources. 
 Write "visualize_on = true" at the beginning of dab.py to visualize plots during dab execution.
+
+DISCLAIMER: dnn2 not trained yet, for now code running with ideal snr estimation
