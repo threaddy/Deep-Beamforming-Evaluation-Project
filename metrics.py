@@ -127,7 +127,8 @@ def calc_stoi_couple(in_speech_dir, out_speech_dir):
 
         if fs1 != fs2:
             print("Error: output and input files have different sampling rate")
-        res = stoi(x[0:len(y)], y, fs1)
+        m = min(len(x), len(y))
+        res = stoi(x[0:m], y[0:m], fs1)
         stoi_list.append(res)
         # print(g, "\t",  res)
 
