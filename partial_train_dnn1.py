@@ -14,7 +14,7 @@ from keras.optimizers import SGD
 
 from data_generator import DataGenerator
 import prepare_data as pp
-import config_dnn1 as conf1
+import dnn1_config as conf1
 from sklearn import preprocessing
 
 from keras.callbacks import TensorBoard

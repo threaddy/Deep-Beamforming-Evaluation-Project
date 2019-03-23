@@ -10,29 +10,36 @@ data_train_dir = os.path.join("dnn1", "dnn1_packed_features", "train")
 data_test_dir = os.path.join("dnn1", "dnn1_packed_features", "test")
 logs = os.path.join('dnn1', 'logs')
 model_dir = os.path.join("dnn1", "dnn1_packed_features", "models")
-stats_dir = os.path.join("dnn1", "dnn1_packed_features", "training_stats")
+stats_dir = os.path.join("dnn1", "training_stats")
 
 
 
 noise_path = 'noise/babble.wav'
 fs = 16000
 
-data_file_dimension = 10
+data_file_dimension = 512
 create_new_database = True
 save_single_files = True
 
-training_number = 40
-test_number = 20
+training_number = 30208
+test_number = 2048
 n_files_to_save = 5
 
 sample_rate = 16000
 n_window = 512      # windows size for FFT
 n_overlap = 256     # overlap of window
 n_concat = 7
-n_hop= 3
+n_hop = 3
 
 lr = 0.08                                               #learning rate
-iterations = 52000
+
+epochs = 50
 batch_size = 512
+
+retrain = 0                                             #inset prev iteration model to retrain, 0 = no previous model
+
+multi_gpu = 1                                           # number of gpus to use
+
+iterations = 4000                                       # to select corresponding model in evaluation
 
 # print("%d iterations / epoch" % int(tr_x.shape[0] / batch_size))

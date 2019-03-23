@@ -72,7 +72,7 @@ def real_to_complex(pd_abs_x, gt_x):
       2d complex array, (n_time, n_freq)
     """
     theta = np.angle(gt_x)
-    cmplx = pd_abs_x * np.exp(1j * theta)
+    cmplx = np.negative(pd_abs_x * np.exp(1j * theta))
     return cmplx
 
 

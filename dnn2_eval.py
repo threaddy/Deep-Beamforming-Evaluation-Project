@@ -2,7 +2,7 @@ import numpy as np
 import os
 from keras.models import load_model
 import prepare_data as pp
-import config_dnn2 as conf2
+import dnn2_config as conf2
 
 
 
@@ -52,7 +52,7 @@ def predict(mix_folder, enh_folder):
 
 
 
-def predict_file(noisy_file_path, enh_file_path, model):
+def predict_file(noisy_file_path, enh_file_path):
     # Load model.
     data_type = "test"
     model_path = os.path.join(conf2.model_dir, "md_%diters.h5" % conf2.iterations)
@@ -72,6 +72,6 @@ def predict_file(noisy_file_path, enh_file_path, model):
 
 
 
-# res2 = predict("data_eval/dnn1_in", "data_eval/dnn1_out")
-# res1 = 1 / (1/res2 -1)
-# print(res2)
+res2 = predict("data_eval/dnn1_in", "data_eval/dnn1_out")
+res1 = 1 / (1/res2 - 1)
+print(res2)

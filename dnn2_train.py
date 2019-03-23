@@ -1,32 +1,27 @@
 import numpy as np
 import os
 import time
-
 import math
 import random
 import string
-import sys
-import logging
+import prepare_data as pp
+import dnn1_eval as dnn1
+import dnn1_config as conf1
+import dnn2_config as conf2
 
-from get_gpu import get_gpu
-if sys.platform == 'linux':
-    gpuID = get_gpu()
-    logging.info("GPU ID:" + str(gpuID))
+
+# from get_gpu import get_gpu
+# if sys.platform == 'linux':
+#     gpuID = get_gpu()
+#     logging.info("GPU ID:" + str(gpuID))
 
 
 
 from keras.models import Sequential
 from keras.layers import Dense, Dropout
 from keras.optimizers import SGD
-
-
 from keras.callbacks import TensorBoard
 
-
-import prepare_data as pp
-import dnn1_eval as dnn1
-import config_dnn1 as conf1
-import config_dnn2 as conf2
 
 
 
@@ -242,7 +237,7 @@ def prepare_database():
 # TRAIN
 ########################################################################################################################
 ########################################################################################################################
-get_gpu()
+# get_gpu()
 
 pp.create_folder(conf2.train_folder)
 pp.create_folder(conf2.test_folder)
@@ -296,8 +291,6 @@ model.add(Dense(n_hid, input_dim=2, activation='relu'))
 model.add(Dropout(0.2))
 model.add(Dense(n_hid, activation='sigmoid'))
 model.add(Dropout(0.2))
-# model.add(Dense(n_hid, activation='relu'))
-# model.add(Dropout(0.2))
 model.add(Dense(1, activation='linear'))
 # model.summary()
 
@@ -305,7 +298,7 @@ model.add(Dense(1, activation='linear'))
 tsbd = TensorBoard(log_dir=conf2.logs)
 
 model.compile(loss='mean_absolute_error',
-              optimizer=SGD(lr=conf2.lr, momentum=0.0, decay=0.0015))
+              optimizer=SGD(lr=conf2.lr, momentum=0.9, decay=0.0015))
 
 model.fit(tr_x, tr_y_s2nr, epochs=conf2.epochs, batch_size=conf2.batch_size,
           validation_data=(te_x, te_y_s2nr), callbacks=[tsbd])

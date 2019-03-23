@@ -8,7 +8,7 @@ from spectrogram_to_wave import real_to_complex
 from keras.models import load_model
 
 import prepare_data as pp
-import config_dnn1 as conf1
+import dnn1_config as conf1
 
 
 
@@ -18,17 +18,16 @@ import config_dnn1 as conf1
 visualize_plot = False
 
 def visualize(mixed_x, pred):
-    fig, axs = plt.subplots(3, 1, sharex=False)
+    fig, axs = plt.subplots(2, 1, sharex=False)
     axs[0].matshow(mixed_x.T, origin='lower', aspect='auto', cmap='jet')
-    # axs[1].matshow(speech_x.T, origin='lower', aspect='auto', cmap='jet')
-    axs[2].matshow(pred.T, origin='lower', aspect='auto', cmap='jet')
-    # axs[0].set_title("%ddb mixture log spectrogram" % int(te_snr))
-    # axs[1].set_title("Clean speech log spectrogram")
-    axs[2].set_title("Enhanced speech log spectrogram")
-    for j1 in range(3):
+    axs[1].matshow(pred.T, origin='lower', aspect='auto', cmap='jet')
+    axs[1].set_title("mixed speech log spectrogram")
+    axs[1].set_title("Enhanced speech log spectrogram")
+    for j1 in range(2):
         axs[j1].xaxis.tick_bottom()
     plt.tight_layout()
     plt.show()
+
 
 
 def predict_folder(input_file_folder: object, output_file_folder: object) -> object:
@@ -67,7 +66,6 @@ def predict_folder(input_file_folder: object, output_file_folder: object) -> obj
         # Scale data.
         # if scale:
         mixed_x = pp.scale_on_2d(mixed_x, scaler)
-        # speech_x = pp.scale_on_2d(speech_x, scaler)
 
         # Cut input spectrogram to 3D segments with n_concat.
         mixed_x_3d = pp.mat_2d_to_3d(mixed_x, agg_num=conf1.n_concat, hop=1)
@@ -89,7 +87,6 @@ def predict_folder(input_file_folder: object, output_file_folder: object) -> obj
 
         mixed_all.append(mixed_complex)
         pred_all.append(real_to_complex(pred, mixed_complex))
-
 
 
         # Recover enhanced wav.
@@ -121,6 +118,7 @@ def predict_file(file_path, model, scaler):
     mixed_x = pp.log_sp(mixed_x)
     # speech_x = dnn1_train.log_sp(speech_x)
 
+
     # Scale data.
     # if scale:
     mixed_x = pp.scale_on_2d(mixed_x, scaler)
@@ -131,6 +129,9 @@ def predict_file(file_path, model, scaler):
 
     # Predict.
     pred = model.predict(mixed_x_3d)
+
+    if visualize_plot:
+        visualize(mixed_x, pred)
     # Inverse scale.
     # if scale:
     mixed_x = pp.inverse_scale_on_2d(mixed_x, scaler)
@@ -168,4 +169,39 @@ def load_dnn():
 
     return model, scaler
 
-# dnn1_inputs, dnn1_outputs = predict_folder("dnn1/dnn1_train", "dnn1/dnn1_train")
+
+def plot_training_stat(stats_dir, bgn_iter, fin_iter, interval_iter):
+    """Plot training and testing loss.
+
+    Args:
+      stats_dir: str, path of training stats.
+      bgn_iter: int, plot from bgn_iter
+      fin_iter: int, plot finish at fin_iter
+      interval_iter: int, interval of files.
+    """
+
+    tr_losses, te_losses, iters = [], [], []
+
+    # Load stats.
+
+    for iter in range(bgn_iter, fin_iter, interval_iter):
+        stats_path = os.path.join(stats_dir, "%diters.p" % iter)
+        dict = pickle.load(open(stats_path, 'rb'))
+        tr_losses.append(dict['tr_loss'])
+        te_losses.append(dict['te_loss'])
+        iters.append(dict['iter'])
+
+    # Plot
+    line_tr, = plt.plot(tr_losses, c='b', label="Train")
+    line_te, = plt.plot(te_losses, c='r', label="Test")
+    plt.axis([0, len(iters), 0, max(tr_losses)])
+    plt.xlabel("Iterations")
+    plt.ylabel("Loss")
+    plt.legend(handles=[line_tr, line_te])
+    plt.xticks(np.arange(len(iters)), iters)
+    plt.show()
+
+
+# dnn1_inputs, dnn1_outputs = predict_folder("data_eval/dnn1_in", "data_eval/dnn1_out")
+# model, scaler = load_dnn()
+# predict_file('data_eval/sa1.wav', model, scaler)

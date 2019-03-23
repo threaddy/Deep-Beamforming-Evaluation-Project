@@ -41,16 +41,16 @@ dnn2_data = (np.asarray(dnn2_data)).flatten()
 print(dnn1_data.shape)
 print(dnn2_data.shape)
 
-if os.path.exists('dnn1/dnn1_files_list.txt'):
-        os.remove('dnn1/dnn1_files_list.txt')
-f1 = open('dnn1/dnn1_files_list.txt', 'w')
+
+if os.path.exists(os.path.join('dnn1', 'dnn1_files_list.txt')):
+        os.remove(os.path.join('dnn1', 'dnn1_files_list.txt'))
+f1 = open(os.path.join('dnn1', 'dnn1_files_list.txt'), 'w')
 for line in dnn1_data:
     f1.write("%s\n" % line)
 
 
-if os.path.exists('dnn2/dnn2_files_list.txt'):
-        os.remove('dnn2/dnn2_files_list.txt')
-f1 = open('dnn2/dnn2_files_list.txt', 'w')
+if os.path.exists(os.path.join('dnn2', 'dnn2_files_list.txt')):
+        os.remove(os.path.join('dnn2', 'dnn2_files_list.txt'))
+f1 = open(os.path.join('dnn2', 'dnn2_files_list.txt'), 'w')
 for line in dnn2_data:
     f1.write("%s\n" % line)
-
