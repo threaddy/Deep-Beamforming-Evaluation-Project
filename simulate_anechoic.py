@@ -3,10 +3,45 @@ import random
 import numpy as np
 import prepare_data as pp
 import os
+from dab import dab_run
+import metrics as m
+import sys
+
+def query_yes_no(question, default="yes"):
+    """Ask a yes/no question via raw_input() and return their answer.
+
+    "question" is a string that is presented to the user.
+    "default" is the presumed answer if the user just hits <Enter>.
+        It must be "yes" (the default), "no" or None (meaning
+        an answer is required of the user).
+
+    The "answer" return value is True for "yes" or False for "no".
+    """
+    valid = {"yes": True, "y": True, "ye": True,
+             "no": False, "n": False}
+    if default is None:
+        prompt = " [y/n] "
+    elif default == "yes":
+        prompt = " [Y/n] "
+    elif default == "no":
+        prompt = " [y/N] "
+    else:
+        raise ValueError("invalid default answer: '%s'" % default)
+
+    while True:
+        sys.stdout.write(question + prompt)
+        choice = input().lower()
+        if default is not None and choice == '':
+            return valid[default]
+        elif choice in valid:
+            return valid[choice]
+        else:
+            sys.stdout.write("Please respond with 'yes' or 'no' "
+                             "(or 'y' or 'n').\n")
 
 
 def set_microphone_at_distance(clean_data, noise_data, framerate, distance):
-    meter_snr = 10 ** (15 / 20)  # chosen snr at one meter distance (15 dB)
+    meter_snr = 10 ** (25 / 20)  # chosen snr at one meter distance (15 dB)
     clean_energy = 0
     noise_energy = 0
     sound_speed = 343
@@ -39,14 +74,17 @@ def set_microphone_at_distance(clean_data, noise_data, framerate, distance):
 
     final_s2nr = (clean_energy/distance)/(new_noise_energy + clean_energy/distance)            #calculating s2nr of attenuated speech
 
-
     return mixed_data, new_noise_data, clean_data, final_s2nr
 
 
-def create_room(source_file, noise_file):
-    dist = [2, 4, 8, 20]
+def create_room(source_file, noise_file, dist):
+
     (clean, fs) = pp.read_audio(source_file)
     (noise, _) = pp.read_audio(noise_file)
+
+    for file in os.listdir(os.path.join("data_eval", "dnn1_in")):
+        file_path = os.path.join("data_eval", "dnn1_in", file)
+        os.remove(file_path)
 
     for n in range(len(dist)):
 
@@ -64,5 +102,45 @@ def create_room(source_file, noise_file):
         pp.write_audio(mixed_path, mixed, fs)
         #pp.write_audio(clean_path, clean_new, fs)
 
+go_on = True
 
-create_room('data_eval/sa1.wav', 'noise/babble.wav')
+
+
+
+while go_on == True:
+    work_dir = 'data_eval'
+    speech_dir = os.path.join('data_eval', 'test_speech')
+
+
+    input_string = input('Insert microphones distances: ')
+    dist = input_string.split()
+    dist = list(map(int, dist))
+    d_mean = math.ceil(sum(dist)/len(dist))
+
+    mode = input('Insert algorithm to use (dab or db): ')
+
+    source_files = [f for f in os.listdir(speech_dir)
+                    if f.endswith(".wav")]
+
+    # executing for all source speeches in speech folder
+    for f in source_files:
+        create_room(os.path.join(speech_dir, f), 'noise/babble.wav', dist)
+        dab_run(f, mode=mode)
+
+    # calculating speech-per-speech indexes
+    m.calculate_pesq_couple(speech_dir, 'data_eval/dab')
+    avg_pesqs, std_pesqs = m.get_pesq_stats()
+    stoi_res = m.calc_stoi_couple(speech_dir, 'data_eval/dab')
+    sdr_res = m.calc_sdr_couple(speech_dir, 'data_eval/dab')
+
+
+
+    room_dims = [30, 30]
+    iterations = 10000
+    steps = 1000
+    n_mics = len(dist)
+
+    # distrib = m.monte_carlo(room_dims, n_mics, iterations, steps, 'rect')
+
+
+    go_on = query_yes_no('Simulate new room?')

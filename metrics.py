@@ -10,11 +10,11 @@ import csv
 import numpy as np
 import pickle
 import matplotlib.pyplot as plt
-import pystoi
 import prepare_data as pp
 import random
 import math
 import matplotlib.pyplot as plt
+from pystoi.stoi import stoi
 
 
 training_stats1 = "dnn1/dnn1_packed_features/training_stats/"
@@ -23,40 +23,10 @@ input_dir = "data_eval/dnn1_in"
 output_dir = "data_eval/dnn1_out"
 
 
-debug = True
+debug = False
 
 
 
-def plot_training_stat(stats_dir, bgn_iter, fin_iter, interval_iter):
-    """Plot training and testing loss.
-
-    Args:
-      stats_dir: str, path of training stats.
-      bgn_iter: int, plot from bgn_iter
-      fin_iter: int, plot finish at fin_iter
-      interval_iter: int, interval of files.
-    """
-
-    tr_losses, te_losses, iters = [], [], []
-
-    # Load stats.
-
-    for iter in range(bgn_iter, fin_iter, interval_iter):
-        stats_path = os.path.join(stats_dir, "%diters.p" % iter)
-        dict = pickle.load(open(stats_path, 'rb'))
-        tr_losses.append(dict['tr_loss'])
-        te_losses.append(dict['te_loss'])
-        iters.append(dict['iter'])
-
-    # Plot
-    line_tr, = plt.plot(tr_losses, c='b', label="Train")
-    line_te, = plt.plot(te_losses, c='r', label="Test")
-    plt.axis([0, len(iters), 0, max(tr_losses)])
-    plt.xlabel("Iterations")
-    plt.ylabel("Loss")
-    plt.legend(handles=[line_tr, line_te])
-    plt.xticks(np.arange(len(iters)), iters)
-    plt.show()
 
 
 def calculate_pesq_couple(in_speech_dir, out_speech_dir):
@@ -138,8 +108,8 @@ def get_pesq_stats():
         avg_list.append(avg_pesq)
         std_list.append(std_pesq)
         print(f.format(noise_type, "%.2f +- %.2f" % (avg_pesq, std_pesq)))
-    print(f.format("Avg.", "%.2f +- %.2f" % (np.mean(avg_list), np.mean(std_list))), "\n")
-
+    # print(f.format("Avg.", "%.2f +- %.2f" % (np.mean(avg_list), np.mean(std_list))), "\n")
+    return avg_list[0], std_list[0]
 
 def calc_stoi_couple(in_speech_dir, out_speech_dir):
     in_names = [os.path.join(in_speech_dir, na)
@@ -157,7 +127,7 @@ def calc_stoi_couple(in_speech_dir, out_speech_dir):
 
         if fs1 != fs2:
             print("Error: output and input files have different sampling rate")
-        res = pystoi.stoi(x, y, fs1)
+        res = stoi(x[0:len(y)], y, fs1)
         stoi_list.append(res)
         # print(g, "\t",  res)
 
@@ -177,14 +147,19 @@ def calc_stoi(in_file, out_speech_dir):
     print("---------------------------------")
     print("\t", "STOI", "\n")
 
+
     (x, fs1) = pp.read_audio(in_file)
 
     for f in out_names:
+        print(f)
         (y, fs2) = pp.read_audio(f)
+
 
         if fs1 != fs2:
             print("Error: output and input files have different sampling rate")
-        res = pystoi.stoi(x, y, fs1)
+
+        m = min(len(x), len(y))
+        res = stoi(x[0:m], y[0:m], fs1)
         stoi_list.append(res)
         # print(g, "\t",  res)
 
@@ -231,7 +206,7 @@ def calc_sdr(in_file, out_speech_dir):
                  if na.endswith(".wav")]
     sdr_list = []
     print("---------------------------------")
-    print("\t", "STOI", "\n")
+    print("\t", "SDR", "\n")
 
     (x, fs1) = pp.read_audio(in_file)
     top = 1 / x.shape[0] * (sum(x ** 2))
@@ -257,6 +232,7 @@ def monte_carlo(room_dims, n_mics, iterations, steps, mode):
         max_dist = math.ceil(math.sqrt(room_dims[0]**2 + room_dims[1]**2))
         distribution = np.zeros([1, max_dist])
 
+    print("Monte Carlo microphones distance probability ...")
     it = 0
     while it < iterations:
         t = np.array([random.uniform(0, steps), random.uniform(0, steps)])
@@ -277,33 +253,50 @@ def monte_carlo(room_dims, n_mics, iterations, steps, mode):
         distribution[0, math.ceil(mean_dist)] += 1
         it += 1
 
+    plt.plot(distribution.T)
+    plt.show()
 
     return distribution
 
 
-def prob_avg():
+def prob_res(distances, perfs, distrib):
+    distrib = distrib.T
+
+    e_num = 0
+    e_den = 0
+    for d, p in zip(distances, perfs):
+        t1 = np.trapz(distrib[d:d+1])
+        t2 = p * t1
+        e_num = e_num + t2
+        e_den = e_den + t1
+    E = e_num / e_den
+
+    s_num = 0
+    for d, p in zip(distances, perfs):
+        t1 = np.trapz(distrib[d:d+1])
+        t2 = abs(p - E)
+        s_num = s_num + (t2 * t1)
+    S = s_num / e_den
+
+    return E, S
 
 
 
-    return
-
-
-def prob_std():
-    return
 
 
 if debug == True:
     # plot_training_stat(training_stats1, 0, 100, 10)
-    calculate_pesq('data_eval/sa1.wav', 'data_eval/dab')
-    get_pesq_stats()
-    #stoi_res = calc_stoi('data_eval/sa1.wav', 'data_eval/dab')
-    sdr_res = calc_sdr('data_eval/sa1.wav', 'data_eval/dab')
+    # calculate_pesq('data_eval/sa1.wav', 'data_eval/dnn1_out')
+    # avg_pesqs, std_pesqs =get_pesq_stats()
+    # stoi_res = calc_stoi('data_eval/sa1.wav', 'data_eval/dnn1_out')
+    # sdr_res = calc_sdr('data_eval/sa1.wav', 'data_eval/dnn1_out')
 
     room_dims = [30, 30]
-    iterations = 50000
+    iterations = 10000
     steps = 1000
     n_mics = 16
 
-    # dis = monte_carlo(room_dims, n_mics, iterations, steps, 'rect')
-    # plt.plot(dis.T)
-    # plt.show()
+    dis = monte_carlo(room_dims, n_mics, iterations, steps, 'rect')
+    plt.plot(dis.T)
+    plt.show()
+
