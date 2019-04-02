@@ -10,9 +10,8 @@ import string
 from keras.models import Sequential
 from keras.layers import Dense, Dropout, Flatten
 from keras.optimizers import SGD
-from keras.optimizers import Adam
-from keras.models import load_model
 from keras.utils import multi_gpu_model
+
 
 from data_generator import DataGenerator
 import prepare_data as pp
@@ -77,7 +76,7 @@ def eval(model, gen, x, y):
     pred_all, y_all = [], []
 
     # Inference in mini batch.
-    for (batch_x, batch_y, _) in gen.generate(xs=[x], ys=[y]):
+    for (batch_x, batch_y) in gen.generate(xs=[x], ys=[y]):
         pred = model.predict(batch_x)
         pred_all.append(pred)
         y_all.append(batch_y)
@@ -97,29 +96,29 @@ def compute_scaler(data_type):
 
     # Load data.
     t1 = time.time()
-    data_folder = os.path.join("dnn1", "dnn1_packed_features", data_type)
+    data_folder =  os.path.join("dnn1", "dnn1_packed_features", data_type)
     data_file_names = [os.path.join(data_folder, f)
                        for f in os.listdir(data_folder)
                        if f.endswith(".h5")]
 
-    for hdf5_path in data_file_names:
+    y = []
+    for hdf5_path in data_file_names[0:5]:
         with h5py.File(hdf5_path, 'r') as hf:
             x = hf.get('x')
             x = np.array(x)  # (n_segs, n_concat, n_freq)
+        y.append(x)
+    y = np.concatenate(y, axis=0)
 
+    # Compute scaler.
+    (n_segs, n_concat, n_freq) = y.shape
+    y2d = y.reshape((n_segs * n_concat, n_freq))
+    scaler = preprocessing.StandardScaler(with_mean=True, with_std=True).fit(y2d)
+    # print(scaler.mean_)
+    # print(scaler.scale_)
 
-            # Compute scaler.
-            (n_segs, n_concat, n_freq) = x.shape
-            y2d = x.reshape((n_segs * n_concat, n_freq))
-            scaler = preprocessing.StandardScaler(with_mean=True, with_std=True).fit(y2d)
-            # print(scaler.mean_)
-            # print(scaler.scale_)
-
-            tfile = os.path.splitext(os.path.basename(hdf5_path))[0]
-
-            # Write out scaler.
-            out_path = os.path.join(conf1.packed_feature_dir, data_type, "%s_scaler.p" % tfile)
-            pickle.dump(scaler, open(out_path, 'wb'))
+    # Write out scaler.
+    out_path = os.path.join(conf1.packed_feature_dir, data_type, "scaler.p")
+    pickle.dump(scaler, open(out_path, 'wb'))
 
     print("Save scaler to %s" % out_path)
     print("Compute scaler finished! %s s" % (time.time() - t1,))
@@ -178,13 +177,6 @@ def set_microphone_at_distance(clean_data, noise_data, framerate, distance):
 #######################################################################################################################
 def prepare_database():
 
-    if conf1.retrain != 0:
-        for file in os.listdir(conf1.data_train_dir):
-            file_path = os.path.join(conf1.data_train_dir, file)
-            os.remove(file_path)
-        for file in os.listdir(conf1.data_test_dir):
-            file_path = os.path.join(conf1.data_test_dir, file)
-            os.remove(file_path)
 
     (noise, _) = pp.read_audio(conf1.noise_path)
 
@@ -199,48 +191,45 @@ def prepare_database():
     snr1_list = []
     mixed_avg = []
 
-    i = 0
-    while i < conf1.training_number:
-        for n in range(conf1.data_file_dimension):
-            i += 1
-            current_file = (random.choice(dnn1_data)).rstrip()
-            dist = random.randint(1, 20)
-            (clean, _) = pp.read_audio(current_file)
+    for n in range(conf1.training_number):
+        current_file = (random.choice(dnn1_data)).rstrip()
+        dist = random.randint(1, 20)
+        (clean, _) = pp.read_audio(current_file)
 
 
-            mixed, noise_new, clean_new, snr = set_microphone_at_distance(clean, noise, conf1.fs, dist)
+        mixed, noise_new, clean_new, snr = set_microphone_at_distance(clean, noise, conf1.fs, dist)
 
-            snr1_list.append(snr)
-            mixed_avg.append(np.mean(mixed))
-
-
-            if i % 10 == 0:
-                print(n)
-
-            if conf1.save_single_files and n < conf1.n_files_to_save:
-
-                sr = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(5))
-
-                path_list = current_file.split(os.sep)
-                mixed_name = "mix_%s_%s_%s" % (path_list[2], sr, os.path.basename(current_file))
-                clean_name = "clean_%s_%s_%s" % (path_list[2], sr, os.path.basename(current_file))
-                path_list = current_file.split(os.sep)
-
-                mixed_path = os.path.join(conf1.train_folder, mixed_name)
-                clean_path = os.path.join(conf1.train_folder, clean_name)
-
-                pp.write_audio(mixed_path, mixed, conf1.fs)
-                pp.write_audio(clean_path, clean_new, conf1.fs)
+        snr1_list.append(snr)
+        mixed_avg.append(np.mean(mixed))
 
 
-            clean_spec = pp.calc_sp(clean_new, mode='magnitude')
-            mixed_spec = pp.calc_sp(mixed, mode='complex')
+        if n % 10 == 0:
+            print(n)
 
-            clean_all.append(clean_spec)
-            mixed_all.append(mixed_spec)
+        if conf1.save_single_files and n < conf1.n_files_to_save:
 
-        print(len(clean_all), ',', len(mixed_all))
-        num_tr = pp.pack_features(mixed_all, clean_all, 'train', str(int(time.time())))
+            sr = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(5))
+
+            path_list = current_file.split(os.sep)
+            mixed_name = "mix_%s_%s_%s" % (path_list[2], sr, os.path.basename(current_file))
+            clean_name = "clean_%s_%s_%s" % (path_list[2], sr, os.path.basename(current_file))
+            path_list = current_file.split(os.sep)
+
+            mixed_path = os.path.join(conf1.train_folder, mixed_name)
+            clean_path = os.path.join(conf1.train_folder, clean_name)
+
+            pp.write_audio(mixed_path, mixed, conf1.fs)
+            pp.write_audio(clean_path, clean_new, conf1.fs)
+
+
+        clean_spec = pp.calc_sp(clean_new, mode='magnitude')
+        mixed_spec = pp.calc_sp(mixed, mode='complex')
+
+        clean_all.append(clean_spec)
+        mixed_all.append(mixed_spec)
+
+    print(len(clean_all), ',', len(mixed_all))
+    num_tr = pp.pack_features(mixed_all, clean_all, 'train')
 
     compute_scaler('train')
 
@@ -254,53 +243,49 @@ def prepare_database():
     snr1_list = []
     mixed_avg = []
 
-    i = 0
-    while i < conf1.test_number:
-        for n in range(conf1.data_file_dimension):
-            i += 1
-            current_file = (random.choice(dnn1_data)).rstrip()
-            dist = random.randint(1, 20)
-            (clean, _) = pp.read_audio(current_file)
+
+    for n in range(conf1.test_number):
+        current_file = (random.choice(dnn1_data)).rstrip()
+        dist = random.randint(1, 20)
+        (clean, _) = pp.read_audio(current_file)
+
+        mixed, noise_new, clean_new, snr = set_microphone_at_distance(clean, noise, conf1.fs, dist)
+
+        snr1_list.append(snr)
+        mixed_avg.append(np.mean(mixed))
 
 
-            mixed, noise_new, clean_new, snr = set_microphone_at_distance(clean, noise, conf1.fs, dist)
+        if n % 10 == 0:
+            print(n)
 
-            snr1_list.append(snr)
-            mixed_avg.append(np.mean(mixed))
+        if conf1.save_single_files and n < conf1.n_files_to_save:
 
+            sr = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(5))
 
-            if i % 10 == 0:
-                print(n)
+            path_list = current_file.split(os.sep)
+            mixed_name = "mix_%s_%s_%s" % (path_list[2], sr, os.path.basename(current_file))
+            clean_name = "clean_%s_%s_%s" % (path_list[2], sr, os.path.basename(current_file))
 
-            if conf1.save_single_files and n < conf1.n_files_to_save:
+            mixed_path = os.path.join(conf1.test_folder, mixed_name)
+            clean_path = os.path.join(conf1.test_folder, clean_name)
 
-                sr = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(5))
-
-                path_list = current_file.split(os.sep)
-                mixed_name = "mix_%s_%s_%s" % (path_list[2], sr, os.path.basename(current_file))
-                clean_name = "clean_%s_%s_%s" % (path_list[2], sr, os.path.basename(current_file))
-                path_list = current_file.split(os.sep)
-
-                mixed_path = os.path.join(conf1.train_folder, mixed_name)
-                clean_path = os.path.join(conf1.train_folder, clean_name)
-
-                pp.write_audio(mixed_path, mixed, conf1.fs)
-                pp.write_audio(clean_path, clean_new, conf1.fs)
+            pp.write_audio(mixed_path, mixed, conf1.fs)
+            pp.write_audio(clean_path, clean_new, conf1.fs)
 
 
-            clean_spec = pp.calc_sp(clean_new, mode='magnitude')
-            mixed_spec = pp.calc_sp(mixed, mode='complex')
+        clean_spec = pp.calc_sp(clean_new, mode='magnitude')
+        mixed_spec = pp.calc_sp(mixed, mode='complex')
 
-            clean_all.append(clean_spec)
-            mixed_all.append(mixed_spec)
+        clean_all.append(clean_spec)
+        mixed_all.append(mixed_spec)
 
-        print(len(clean_all), ',', len(mixed_all))
-        num_te = pp.pack_features(mixed_all, clean_all, 'test', str(int(time.time())))
+    print(len(clean_all), ',', len(mixed_all))
+
+    num_te = pp.pack_features(mixed_all, clean_all, 'test')
 
     compute_scaler('test')
 
-
-    return num_tr, num_te
+    return num_tr, num_te,
 
 ########################################################################################################################
 ########################################################################################################################
@@ -324,8 +309,9 @@ t1 = time.time()
 if conf1.create_new_database:
     num_tr, num_te = prepare_database()
 
-h5_train_list = [f for f in sorted(os.listdir(conf1.data_train_dir))
+h5_train_list = [f for f in os.listdir(conf1.data_train_dir)
                                        if f.endswith('.h5')]
+# num_tr = len(h5_train_list)
 
 h5_test_list = [f for f in os.listdir(conf1.data_test_dir)
                                        if f.endswith('.h5')]
@@ -336,7 +322,10 @@ tr_y = []
 te_x = []
 te_y = []
 
-
+for i in h5_train_list:
+    tr_x_t, tr_y_t = pp.load_hdf5(os.path.join(conf1.data_train_dir, i))
+    tr_x.append(tr_x_t)
+    tr_y.append(tr_y_t)
 
 for i in h5_test_list:
     te_x_t, te_y_t = pp.load_hdf5(os.path.join(conf1.data_test_dir, i))
@@ -344,25 +333,30 @@ for i in h5_test_list:
     te_y.append(te_y_t)
 
 
+tr_x = np.concatenate(tr_x, axis=0)
+tr_y = np.concatenate(tr_y, axis=0)
 te_x = np.concatenate(te_x, axis=0)
 te_y = np.concatenate(te_y, axis=0)
 
-#scale test data
-scaler = pickle.load(open(os.path.join(conf1.packed_feature_dir, 'test', 'scaler.p'), 'rb'))
-te_x = pp.scale_on_3d(te_x, scaler)
-te_y = pp.scale_on_2d(te_y, scaler)
-print("Scale data time: %s s" % (time.time() - t1,))
-
+print(tr_x.shape, tr_y.shape)
+print(te_x.shape, te_y.shape)
 print("Load data time: %s s" % (time.time() - t1,))
 
 # conf.batch_size = 512
-# print("%d iterations / epoch" % int(tr_x.shape[0] / conf1.batch_size))
+print("%d iterations / epoch" % int(tr_x.shape[0] / conf1.batch_size))
 
+# Scale data.
+if True:
+    t1 = time.time()
 
+    scaler = pickle.load(open(os.path.join(conf1.packed_feature_dir, 'train', 'scaler.p'), 'rb'))
+    tr_x = pp.scale_on_3d(tr_x, scaler)
+    tr_y = pp.scale_on_2d(tr_y, scaler)
 
-
-tr_x, tr_y = pp.load_hdf5(os.path.join(conf1.data_train_dir, h5_train_list[0]))
-
+    scaler = pickle.load(open(os.path.join(conf1.packed_feature_dir, 'test', 'scaler.p'), 'rb'))
+    te_x = pp.scale_on_3d(te_x, scaler)
+    te_y = pp.scale_on_2d(te_y, scaler)
+    print("Scale data time: %s s" % (time.time() - t1,))
 
 # Debug plot.
 # if False:
@@ -370,8 +364,9 @@ tr_x, tr_y = pp.load_hdf5(os.path.join(conf1.data_train_dir, h5_train_list[0]))
 #     plt.show()
 #     pause
 
+# Build model
 
-# DAB model
+# Build model
 (_, n_concat, n_freq) = tr_x.shape
 n_hid = 1024
 
@@ -381,40 +376,16 @@ model.add(Dense(n_hid, activation='relu'))
 model.add(Dropout(0.2))
 model.add(Dense(n_hid, activation='sigmoid'))
 model.add(Dropout(0.2))
+# model.add(Dense(n_hid, activation='relu'))
+# model.add(Dropout(0.2))
 model.add(Dense(n_freq, activation='linear'))
 model.summary()
 if conf1.multi_gpu > 1:
     model = multi_gpu_model(model, gpus=conf1.multi_gpu)
+
 model.compile(loss='mean_absolute_error',
-              optimizer=SGD(lr=conf1.lr, momentum=0.9, decay=0.0015))
+              optimizer=SGD(lr=conf1.lr, momentum=0.9))#, decay=0.0015))
 
-
-# # SEDNN alternative model
-# (_, n_concat, n_freq) = tr_x.shape
-# n_hid = 2048
-#
-# model = Sequential()
-# model.add(Flatten(input_shape=(n_concat, n_freq)))
-# model.add(Dense(n_hid, activation='relu'))
-# model.add(Dropout(0.2))
-# model.add(Dense(n_hid, activation='relu'))
-# model.add(Dropout(0.2))
-# model.add(Dense(n_hid, activation='relu'))
-# model.add(Dropout(0.2))
-# model.add(Dense(n_freq, activation='linear'))
-# model.summary()
-# if conf1.multi_gpu > 1:
-#     model = multi_gpu_model(model, gpus=conf1.multi_gpu)
-# model.compile(loss='mean_absolute_error',
-#               optimizer=Adam(lr=conf1.lr))
-
-
-
-
-# load previous model
-if conf1.retrain != 0:
-    model_path = os.path.join(conf1.model_dir, "md_%diters.h5" % conf1.retrain)
-    model = load_model(model_path)
 
 
 callback = TensorBoard(log_dir=conf1.logs)
@@ -427,54 +398,53 @@ tr_gen = DataGenerator(batch_size=conf1.batch_size, gtype='train')
 eval_te_gen = DataGenerator(batch_size=conf1.batch_size, gtype='test', te_max_iter=100)
 eval_tr_gen = DataGenerator(batch_size=conf1.batch_size, gtype='test', te_max_iter=100)
 
+# Directories for saving models and training stats
+
+
+# Print loss before training.
+iter = 0
+tr_loss = eval(model, eval_tr_gen, tr_x, tr_y)
+te_loss = eval(model, eval_te_gen, te_x, te_y)
+print("Iteration: %d, tr_loss: %f, te_loss: %f" % (iter, tr_loss, te_loss))
+
+# Save out training stats.
+stat_dict = {'iter': iter,
+             'tr_loss': tr_loss,
+             'te_loss': te_loss, }
+stat_path = os.path.join(conf1.stats_dir, "%diters.p" % iter)
+pickle.dump(stat_dict, open(stat_path, 'wb'), protocol=pickle.HIGHEST_PROTOCOL)
+
 
 
 
 # Train.
 t1 = time.time()
-iter = 0
-epochs = 0
-# while iter < conf1.iterations:
-while epochs < conf1.epochs:
-    random.shuffle(h5_train_list)
-    print("Epoch number ---> %d" % epochs)
-    for i in h5_train_list:
-        tr_x, tr_y = pp.load_hdf5(os.path.join(conf1.data_train_dir, i))
-        # print('current h5 file: %s' % i)
+for (batch_x, batch_y) in tr_gen.generate(xs=[tr_x], ys=[tr_y]):
+    loss = model.train_on_batch(batch_x, batch_y, )
+    iter += 1
 
-        # scale current data
-        hfile = os.path.splitext(os.path.basename(i))[0]
-        scaler = pickle.load(open(os.path.join(conf1.packed_feature_dir, 'train', '%s_scaler.p' % hfile), 'rb'))
-        tr_x = pp.scale_on_3d(tr_x, scaler)
-        # tr_y = np.concatenate(tr_y, axis=0)
-        tr_y = pp.scale_on_2d(tr_y, scaler)
+    # Validate and save training stats.
+    if iter % 1000 == 0:
+        tr_loss = eval(model, eval_tr_gen, tr_x, tr_y)
+        te_loss = eval(model, eval_te_gen, te_x, te_y)
+        print("Iteration: %d, tr_loss: %f, te_loss: %f" % (iter, tr_loss, te_loss))
 
+        write_log(callback, train_names, [tr_loss, te_loss], iter)
+        # Save out training stats.
+        stat_dict = {'iter': iter,
+                     'tr_loss': tr_loss,
+                     'te_loss': te_loss, }
+        stat_path = os.path.join(conf1.stats_dir, "%diters.p" % iter)
+        pickle.dump(stat_dict, open(stat_path, 'wb'), protocol=pickle.HIGHEST_PROTOCOL)
 
-        for (batch_x, batch_y, epoch) in tr_gen.generate(xs=[tr_x], ys=[tr_y]):
-            loss = model.train_on_batch(batch_x, batch_y, )
-            iter += 1
+    # Save model.
+    if iter % 1000 == 0:
+        model_path = os.path.join(conf1.model_dir, "md_%diters.h5" % iter)
+        model.save(model_path)
+        print("Saved model to %s" % model_path)
 
-            # Validate and save training stats.
-            if iter % 10 == 0:
-                tr_loss = eval(model, eval_tr_gen, tr_x, tr_y)
-                te_loss = eval(model, eval_te_gen, te_x, te_y)
-                print("Iteration: %d, tr_loss: %f, te_loss: %f" % (iter, tr_loss, te_loss))
-
-                write_log(callback, train_names, [tr_loss, te_loss], iter)
-                # Save out training stats.
-                stat_dict = {'iter': iter,
-                             'tr_loss': tr_loss,
-                             'te_loss': te_loss, }
-                stat_path = os.path.join(conf1.stats_dir, "%diters.p" % iter)
-                pickle.dump(stat_dict, open(stat_path, 'wb'), protocol=pickle.HIGHEST_PROTOCOL)
-
-
-            if iter % 1000 == 0:
-                model_path = os.path.join(conf1.model_dir, "md_%diters.h5" % iter)
-                model.save(model_path)
-                print("Saved model to %s" % model_path)
-
-    epochs += 1
+    if iter == (conf1.iterations+1):
+        break
 
 
 # model.fit(tr_x, tr_y, epochs= 5)
@@ -484,3 +454,5 @@ while epochs < conf1.epochs:
 
 
 print("Training time: %s s" % (time.time() - t1,))
+
+

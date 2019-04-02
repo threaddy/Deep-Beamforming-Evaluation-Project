@@ -72,6 +72,6 @@ def predict_file(noisy_file_path, enh_file_path):
 
 
 
-res2 = predict("data_eval/dnn1_in", "data_eval/dnn1_out")
-res1 = 1 / (1/res2 - 1)
-print(res2)
+# res2 = predict("data_eval/dnn1_in", "data_eval/dnn1_out")
+# res1 = 1 / (1/res2 - 1)
+# print(res2)

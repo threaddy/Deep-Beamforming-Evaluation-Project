@@ -12,7 +12,7 @@ class DataGenerator(object):
         x = xs[0]
         y = ys[0]
         batch_size = self._batch_size_
-        n_samples = len(x)
+        n_samples = len(y)
 
         index = np.arange(n_samples)
         np.random.shuffle(index)
@@ -27,15 +27,11 @@ class DataGenerator(object):
             iter += 1
             if pointer >= n_samples:
                 epoch += 1
-                if epoch == 1:
+                if self._gtype_ == 'test' and (epoch == 1):
                     break
                 pointer = 0
                 np.random.shuffle(index)
 
             batch_idx = index[pointer: min(pointer + batch_size, n_samples)]
             pointer += batch_size
-            yield x[batch_idx], y[batch_idx], epoch
-
-
-
-
+            yield x[batch_idx], y[batch_idx]

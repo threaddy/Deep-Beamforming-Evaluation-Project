@@ -18,15 +18,15 @@ fs = 16000
 create_new_database = True
 save_single_files = False
 
-training_number = 2048
-test_number = 512
+training_number = 4096
+test_number = 1024
 n_files_to_save = 5
 
 sample_rate = 16000
 
 
-lr = 0.08                                               #learning rate
-epochs = 1000
+lr = 0.008                                               #learning rate
+epochs = 10000
 batch_size = 32
 
 

@@ -19,11 +19,12 @@ fs = 16000
 
 data_file_dimension = 512
 create_new_database = True
-save_single_files = True
+save_single_files = False
 
-training_number = 30208
-test_number = 2048
+training_number = 8192
+test_number = 1024
 n_files_to_save = 5
+# h5_files_to_use = 8
 
 sample_rate = 16000
 n_window = 512      # windows size for FFT
@@ -31,15 +32,15 @@ n_overlap = 256     # overlap of window
 n_concat = 7
 n_hop = 3
 
-lr = 0.08                                               #learning rate
+lr = 0.008                                               #learning rate
 
 epochs = 50
 batch_size = 512
 
 retrain = 0                                             #inset prev iteration model to retrain, 0 = no previous model
 
-multi_gpu = 1                                           # number of gpus to use
+multi_gpu = 2                                           # number of gpus to use
 
-iterations = 4000                                       # to select corresponding model in evaluation
+iterations = 200000                                       # to select corresponding model in evaluation
 
 # print("%d iterations / epoch" % int(tr_x.shape[0] / batch_size))

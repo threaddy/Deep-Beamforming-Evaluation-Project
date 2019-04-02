@@ -121,7 +121,7 @@ def prepare_database():
 
     for n in range(conf2.training_number):
         current_file = (random.choice(dnn2_data)).rstrip()
-        dist = random.uniform(1, 20)
+        dist = random.randint(1, 20)
         (clean, _) = pp.read_audio(current_file)
 
 
@@ -183,7 +183,7 @@ def prepare_database():
 
     for n in range(conf2.test_number):
         current_file = (random.choice(dnn2_data)).rstrip()
-        dist = random.uniform(1, 20)
+        dist = random.randint(1, 20)
         (clean, _) = pp.read_audio(current_file)
 
         mixed, noise_new, clean_new, s2nr = set_microphone_at_distance(clean, noise, conf2.fs, dist)
@@ -298,7 +298,7 @@ model.add(Dense(1, activation='linear'))
 tsbd = TensorBoard(log_dir=conf2.logs)
 
 model.compile(loss='mean_absolute_error',
-              optimizer=SGD(lr=conf2.lr, momentum=0.9, decay=0.0015))
+              optimizer=SGD(lr=conf2.lr, momentum=0.9))#, decay=0.0015))
 
 model.fit(tr_x, tr_y_s2nr, epochs=conf2.epochs, batch_size=conf2.batch_size,
           validation_data=(te_x, te_y_s2nr), callbacks=[tsbd])

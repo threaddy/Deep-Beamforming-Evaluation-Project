@@ -186,7 +186,7 @@ def dab_run(snr_list, file_name="dab_out", mode='dab'):
     # calculate channel weights
     if mode == 'dab':
         new_weights = channel_weights(s2nrs)
-        print(new_weights)
+        print(["{0:0.3f}".format(i) for i in new_weights])
         # multiply enhanced audio for the corresponding weight
         for i, p in zip(dnn1_outputs, new_weights):
             ch_rw_outputs.append(p * i)
@@ -195,7 +195,7 @@ def dab_run(snr_list, file_name="dab_out", mode='dab'):
     # cancel reweighting if db mode
     if mode == 'db':
         new_weights = s2nrs
-        print(new_weights)
+        print(["{0:0.3f}".format(i) for i in new_weights])
         ch_rw_outputs = dnn1_outputs
 
     # execute mvdr

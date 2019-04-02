@@ -84,7 +84,7 @@ def calc_sp(audio, mode):
     return x
 
 
-def pack_features(in_x, in_y, data_type, name):
+def pack_features(in_x, in_y, data_type):
     """Load all features, apply log and conver to 3D tensor, write out to .h5 file.
       data_type: str, 'train' | 'test'.
       n_concat: int, number of frames to be concatenated.
@@ -104,6 +104,7 @@ def pack_features(in_x, in_y, data_type, name):
 
     out_path = os.path.join(conf.packed_feature_dir, data_type, "data.h5")
     create_folder(os.path.dirname(out_path))
+    i = 0
 
     for na in range(len(in_x)):
 
@@ -137,21 +138,25 @@ def pack_features(in_x, in_y, data_type, name):
         # if cnt == 3: break
         cnt += 1
 
+        if (na+1) % conf.data_file_dimension == 0:
+            i += 1
+            # Write out data to .h5 file.
+            out_path = os.path.join(conf.packed_feature_dir, data_type, "tf_data_%s.h5" % (str(int(time.time()))))
+            create_folder(os.path.dirname(out_path))
 
+            with h5py.File(out_path, 'w') as hf:
+                hf.create_dataset('x', data=x_all_new)
+                hf.create_dataset('y', data=y_all_new)
 
-        # Write out data to .h5 file.
-        out_path = os.path.join(conf.packed_feature_dir, data_type, "tf_data_%s.h5" % name)
-        create_folder(os.path.dirname(out_path))
-
-        with h5py.File(out_path, 'w') as hf:
-            hf.create_dataset('x', data=x_all_new)
-            hf.create_dataset('y', data=y_all_new)
+            y_all = []
+            x_all = []
 
             print("Write out to %s" % out_path)
 
-        # print("Pack features finished! %s s" % (time.time() - t1,))
 
-        return 0
+    print("Pack features finished! %s s" % (time.time() - t1,))
+
+    return i
 
 
 def log_sp(x):
