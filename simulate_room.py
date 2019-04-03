@@ -7,14 +7,51 @@ import os
 import random
 import math
 import matplotlib.pyplot as plt
+from dab import dab_run
+import metrics as m
+import sys
+import csv
+import time
 
 
 working_dir = "data_eval/"
 noise_path = 'noise/babble.wav'
 room_dimensions = [30, 30]
-wall_absorption = 1.0
+wall_absorption = 0.6
 fs = 16000
 
+
+def query_yes_no(question, default="yes"):
+    """Ask a yes/no question via raw_input() and return their answer.
+
+    "question" is a string that is presented to the user.
+    "default" is the presumed answer if the user just hits <Enter>.
+        It must be "yes" (the default), "no" or None (meaning
+        an answer is required of the user).
+
+    The "answer" return value is True for "yes" or False for "no".
+    """
+    valid = {"yes": True, "y": True, "ye": True,
+             "no": False, "n": False}
+    if default is None:
+        prompt = " [y/n] "
+    elif default == "yes":
+        prompt = " [Y/n] "
+    elif default == "no":
+        prompt = " [y/N] "
+    else:
+        raise ValueError("invalid default answer: '%s'" % default)
+
+    while True:
+        sys.stdout.write(question + prompt)
+        choice = input().lower()
+        if default is not None and choice == '':
+            return valid[default]
+        elif choice in valid:
+            return valid[choice]
+        else:
+            sys.stdout.write("Please respond with 'yes' or 'no' "
+                             "(or 'y' or 'n').\n")
 
 
 
@@ -67,7 +104,6 @@ def add_noise(clean_data, att_data):
     mixed_data = new_noise_data + att_data
 
     return mixed_data
-
 
 
 
@@ -146,6 +182,8 @@ def DB_generate(source_audio, out_folder, name):
         d = math.sqrt((source_position[0] - mic_pos[0, m])**2 + (source_position[1] - mic_pos[1, m])**2)
         distances.append(d)
 
+    print(mic_distance)
+    print(["{0:0.3f}".format(i) for i in distances])
 
     # create room
     shoebox = pra.ShoeBox(
@@ -185,7 +223,7 @@ def DB_generate(source_audio, out_folder, name):
 
 
 
-def DAB_generate(source_audio, out_folder, name):
+def DAB_generate(source_audio, out_folder, name, dist='None'):
 
     shoebox = pra.ShoeBox(
         room_dimensions,
@@ -195,12 +233,16 @@ def DAB_generate(source_audio, out_folder, name):
     )
 
     # number of microphones
-    M = 4
 
     source_position = np.array([random.uniform(0, room_dimensions[0]), random.uniform(0, room_dimensions[1])])
 
-    distances = np.random.randint(1, 20, M)
+    if dist == 'None':
+        M = 4
+        distances = np.random.randint(1, 20, M)
+    else:
+        distances = dist
 
+    M = len(distances)
     mic_pos = []
     for m in range(M):
         mic_distance = distances[m]
@@ -235,7 +277,10 @@ def DAB_generate(source_audio, out_folder, name):
         signal = pra.utilities.normalize(signal, bits=16)
         mixed_signal = add_noise(source_audio, signal)
         mixed_signal = np.array(mixed_signal, dtype=np.int16)
+
+
         mixed_file = os.path.join(out_folder, 'mix%d_%s' % (n, name))
+
         pp.write_audio(mixed_file, mixed_signal, fs)
 
 
@@ -265,27 +310,116 @@ def visualize(mixed_x, pred):
 
 
 
-sources = [f for f in sorted(os.listdir(working_dir)) if f.endswith("wav")]
+sources = [f for f in sorted(os.listdir(os.path.join(working_dir, 'test_speech'))) if f.endswith("wav")]
+
+    # out_folder = working_dir + os.path.splitext(f)[0]+'_sim'
+    #
+    # DS_folder = os.path.join(out_folder, 'DS')
+    # DB_folder = os.path.join(out_folder, 'DB')
+    # DAB_folder = os.path.join(out_folder, 'DAB')
+    #
+    #
+    # pp.create_folder(DS_folder)
+    # pp.create_folder(DB_folder)
+    # pp.create_folder(DAB_folder)
+
+    # DS_generate(audio_anechoic, DS_folder, f)
+    # DB_generate(audio_anechoic, DB_folder, f)
+    # DAB_generate(audio_anechoic, DAB_folder, f)
+
+go_on = True
+
+index_file = open('index_file_%s.csv' % str(int(time.time())), mode='w')
+index_writer = csv.writer(index_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+index_writer.writerow(['', 'STOI', 'std.', 'PESQ', 'std.', 'SDR', 'std.'])
+while go_on == True:
+    work_dir = 'data_eval'
+    speech_dir = os.path.join('data_eval', 'test_speech')
+    eval_dir = os.path.join('data_eval', 'dnn1_in')
+
+    input_string = input('Insert microphones distances: ')
+    dist = input_string.split()
+    dist = list(map(float, dist))
+    d_mean = math.ceil(sum(dist)/len(dist))
+
+    snr = [5.62/d for d in dist]
+
+    source_files = [f for f in os.listdir(speech_dir)
+                    if f.endswith(".wav")]
+
+    # executing for all source speeches in speech folder
+    for f in source_files:
+        for file in os.listdir(eval_dir):
+            file_path = os.path.join("data_eval", "dnn1_in", file)
+            os.remove(file_path)
+
+        (fs, audio_anechoic) = wavfile.read(os.path.join(speech_dir, f))
+        audio_anechoic = np.asarray(audio_anechoic, dtype=np.int16)
+        DAB_generate(audio_anechoic, eval_dir, f, dist)
+        dab_run(snr, f, mode='dab')
+        dab_run(snr, f, mode='db')
 
 
-for f in sources:
-    file_path = os.path.join(working_dir, f)
-    # audio_anechoic, fs = pp.read_audio(file_path)
 
-    (fs, audio_anechoic) = wavfile.read(file_path)
-    audio_anechoic = np.asarray(audio_anechoic, dtype=np.int16)
-
-    out_folder = working_dir + os.path.splitext(f)[0]+'_sim'
-
-    DS_folder = os.path.join(out_folder, 'DS')
-    DB_folder = os.path.join(out_folder, 'DB')
-    DAB_folder = os.path.join(out_folder, 'DAB')
+    print("--------NOiSY----------------------------------\n -------------")
+    # calculating speech-per-speech indexes
+    m.calculate_pesq_couple(speech_dir, 'data_eval/dnn1_in')
+    avg_pesqs_N, std_pesqs_N = m.get_pesq_stats()
+    avg_stoi_N, std_stoi_N = m.calc_stoi_couple(speech_dir, 'data_eval/dnn1_in')
+    avg_sdr_N, std_sdr_N = m.calc_sdr_couple(speech_dir, 'data_eval/dnn1_in')
 
 
-    pp.create_folder(DS_folder)
-    pp.create_folder(DB_folder)
-    pp.create_folder(DAB_folder)
+    print("--------DS-------------------------------------\n -------------")
+    # calculating speech-per-speech indexes
+    m.calculate_pesq_couple(speech_dir, 'data_eval/dnn1_out')
+    avg_pesqs_DS, std_pesqs_DS = m.get_pesq_stats()
+    avg_stoi_DS, std_stoi_DS = m.calc_stoi_couple(speech_dir, 'data_eval/dnn1_out')
+    avg_sdr_DS, std_sdr_DS = m.calc_sdr_couple(speech_dir, 'data_eval/dnn1_out')
 
-    DS_generate(audio_anechoic, DS_folder, f)
-    DB_generate(audio_anechoic, DB_folder, f)
-    DAB_generate(audio_anechoic, DAB_folder, f)
+    print("--------DB-------------------------------------\n -------------")
+    m.calculate_pesq_couple(speech_dir, 'data_eval/db')
+    avg_pesqs_DB, std_pesqs_DB = m.get_pesq_stats()
+    avg_stoi_DB, std_stoi_DB = m.calc_stoi_couple(speech_dir, 'data_eval/db')
+    avg_sdr_DB, std_sdr_DB = m.calc_sdr_couple(speech_dir, 'data_eval/db')
+
+    print("--------DAB------------------------------------\n -------------")
+    # calculating speech-per-speech indexes
+    m.calculate_pesq_couple(speech_dir, 'data_eval/dab')
+    avg_pesqs_DAB, std_pesqs_DAB = m.get_pesq_stats()
+    avg_stoi_DAB, std_stoi_DAB = m.calc_stoi_couple(speech_dir, 'data_eval/dab')
+    avg_sdr_DAB, std_sdr_DAB = m.calc_sdr_couple(speech_dir, 'data_eval/dab')
+
+    print('-----------------------------------------------------------------------------------------------------------')
+    print('INDEX:\t STOI\t PESQ\t SDR\t ---------------------------------------------------------------------------')
+    print('Noisy \t %f(%f) \t %f(%f) \t %f(%f)' % (avg_stoi_N, std_stoi_N,
+                                                    avg_pesqs_N, std_pesqs_N,
+                                                    avg_sdr_N, std_sdr_N))
+
+    print('DS   \t %f(%f) \t %f(%f) \t %f(%f)' % (avg_stoi_DS, std_stoi_DS,
+                                                   avg_pesqs_DS, std_pesqs_DS,
+                                                   avg_sdr_DS, std_sdr_DS))
+
+    print('DB   \t %f(%f) \t %f(%f) \t %f(%f)' % (avg_stoi_DB, std_stoi_DB,
+                                                   avg_pesqs_DB, std_pesqs_DB,
+                                                   avg_sdr_DB, std_sdr_DB))
+
+    print('DAB \t %f(%f) \t %f(%f) \t %f(%f)' % (avg_stoi_DAB, std_stoi_DAB,
+                                                   avg_pesqs_DAB, std_pesqs_DAB,
+                                                   avg_sdr_DAB, std_sdr_DAB))
+
+    index_writer.writerow([(''.join(str(e) for e in dist))])
+    index_writer.writerow(['Noisy', avg_stoi_N, std_stoi_N, avg_pesqs_N, std_pesqs_N, avg_sdr_N, std_sdr_N])
+    index_writer.writerow(['DS', avg_stoi_DS, std_stoi_DS, avg_pesqs_DS, std_pesqs_DS, avg_sdr_DS, std_sdr_DS])
+    index_writer.writerow(['DB', avg_stoi_DB, std_stoi_DB, avg_pesqs_DB, std_pesqs_DB, avg_sdr_DB, std_sdr_DB])
+    index_writer.writerow(['DAB', avg_stoi_DAB, std_stoi_DAB, avg_pesqs_DAB, std_pesqs_DAB, avg_sdr_DAB, std_sdr_DAB])
+
+    #
+    # room_dims = [30, 30]
+    # iterations = 10000
+    # steps = 1000
+    # n_mics = len(dist)
+
+    # distrib = m.monte_carlo(room_dims, n_mics, iterations, steps, 'rect')
+
+
+    go_on = query_yes_no('Simulate new room?')
